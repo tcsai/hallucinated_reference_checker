@@ -216,8 +216,7 @@ def main():
     if args.references_page_range is not None:
         page_range = parse_page_range(args.references_page_range)
     else:
-        if page_range is None:
-            page_range = find_references_section_by_text(args.pdf_name)
+        page_range = find_references_section_by_text(args.pdf_name)
         if page_range is None:
             print(
                 "Could not auto-detect the references section in the PDF "
