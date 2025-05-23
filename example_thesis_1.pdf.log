@@ -1,0 +1,87 @@
+Automatically detected reference pages: [1, 2, 3, 4, 5, 6]
+
+🔍 [1mReferences not found on Google Scholar:[0m
+  • AllSides. (2023). Allsides methodology. (Accessed April 21, 2023. https:// www.allsides.com/media-bias/media-bias-rating-methods)
+  • Malik, U. (2020). Introduction to pytorch for classiﬁcation. (Accessed March 14, 2023. https://stackabuse.com/introduction-to-pytorch-for -classification/)
+  • Media Bias Fact Check. (2021b).Left vs. right bias: How we rate the bias of media sources.(Accessed April19, 2023. https://mediabiasfactcheck.com/left-vs-right-bias-how -we-rate-the-bias-of-media-sources/)
+  • S cikit Learn. (2023a).Permutation feature importance. (Accessed May 5, 2023. https://scikit-learn.org/stable/modules/permutation _importance.html)
+  • S cikit Learn. (2023b). Tuning the hyper-parameters of an estimator: Search- ing for optimal parameters with successive halving.(Accessed March 29, 2023. https://scikit-learn.org/stable/modules/grid_search .html#successive-halving-user-guide)
+
+🚩 [1mReferences with edit distance > 50:[0m
+╔════════════════════════════════════════════════════════════
+║ [94mStudentRef:[0m
+║   Spinde, T., Hamborg, F., & Gipp, B. (2021). Media bias in german news ar- ticles: A combined approach. In Ecml pkdd 2020 workshops: Workshops of the european conference on machine learning and knowledge discovery in databases (ecml pkdd 2020): Sogood 2020, pdﬂ 2020, mlcs 2020, nfmcp 2020, dina 2020, edml 2020, xkdd 2020 and inra 2020, ghent, belgium, september 14–18, 2020, proceedings (pp. 581–590).
+║ [92mScholarRef:[0m
+║   Spinde, T., Hamborg, F., & Gipp, B. (2020, September). Media bias in german news articles: A combined approach. In Joint European Conference on Machine Learning and Knowledge Discovery in Databases (pp. 581-590). Cham: Springer International Publishing.
+║ [91mEditDistance:[0m 278
+╚════════════════════════════════════════════════════════════
+╔════════════════════════════════════════════════════════════
+║ [94mStudentRef:[0m
+║   Devlin, J., Chang, M.-W., Lee, K., & Toutanova, K. (2018). Bert: Pre-training of deep bidirectional transformers for language understanding. arXiv preprint arXiv:1810.04805.
+║ [92mScholarRef:[0m
+║   Devlin, J., Chang, M. W., Lee, K., & Toutanova, K. (2019, June). Bert: Pre-training of deep bidirectional transformers for language understanding. In Proceedings of the 2019 conference of the North American chapter of the association for computational linguistics: human language technologies, volume 1 (long and short papers) (pp. 4171-4186).
+║ [91mEditDistance:[0m 258
+╚════════════════════════════════════════════════════════════
+╔════════════════════════════════════════════════════════════
+║ [94mStudentRef:[0m
+║   Paybarah, A. (2015). Media matters: New york tv news over-reports on
+║ [92mScholarRef:[0m
+║   Paybarah, A. (2015). Media Matters: New York TV News Over-Reports on Crimes With Black Suspects. POLITICO. Available online at: https://www. politico. com/states/new-york/city-hall/story/2015/03/media-matters-new-york-tv-news-over-reports-on-crimes-with-black-suspects-020674 (accessed May 06, 2022).
+║ [91mEditDistance:[0m 160
+╚════════════════════════════════════════════════════════════
+╔════════════════════════════════════════════════════════════
+║ [94mStudentRef:[0m
+║   GDELT Project. (2015). The gdelt global knowledge graph (gkg) data format codebook v2.1. Retrieved from http://data.gdeltproject.org/ documentation/GDELT-Global_Knowledge_Graph_Codebook-V2.1 .pdf (Accessed 02/03/2020)
+║ [92mScholarRef:[0m
+║   BIAS, O. P. DATA-DRIVEN NEWS OUTLET BIAS DETECTION WITH GDELT (Doctoral dissertation, tilburg university).
+║ [91mEditDistance:[0m 147
+╚════════════════════════════════════════════════════════════
+╔════════════════════════════════════════════════════════════
+║ [94mStudentRef:[0m
+║   Kwak, H., & An, J. (2016). Revealing the hidden patterns of news photos:
+║ [92mScholarRef:[0m
+║   Kwak, H., & An, J. (2016). Revealing the hidden patterns of news photos: Analysis of millions of news photos through gdelt and deep learning-based vision apis. In Proceedings of the International AAAI Conference on Web and Social Media (Vol. 10, No. 2, pp. 99-107).
+║ [91mEditDistance:[0m 145
+╚════════════════════════════════════════════════════════════
+╔════════════════════════════════════════════════════════════
+║ [94mStudentRef:[0m
+║   Spinde, T., Krieger, J.-D., Ruas, T., Mitrovi ´c, J., Götz-Hahn, F., Aizawa, A., & Gipp, B. (2022). Exploiting transformer-based multitask learning for the detection of media bias in news articles. InInformation for a better world: Shaping the global future:17th international conference, iconference 2022, virtual event, february 28–march 4, 2022, proceedings, part i(pp. 225–235).
+║ [92mScholarRef:[0m
+║   Spinde, T., Krieger, J. D., Ruas, T., Mitrović, J., Götz-Hahn, F., Aizawa, A., & Gipp, B. (2022, February). Exploiting transformer-based multitask learning for the detection of media bias in news articles. In International conference on information (pp. 225-235). Cham: Springer International Publishing.
+║ [91mEditDistance:[0m 142
+╚════════════════════════════════════════════════════════════
+╔════════════════════════════════════════════════════════════
+║ [94mStudentRef:[0m
+║   Lundberg, S. M., & Lee, S.-I. (2017). A uniﬁed approach to interpreting model predictions. In I. Guyon et al. (Eds.),Advances in neural in- formation processing systems 30 (pp. 4765–4774). Curran Associates, Inc. Retrieved from http://papers.nips.cc/paper/7062-a-unified -approach-to-interpreting-model-predictions.pdf
+║ [92mScholarRef:[0m
+║   Lundberg, S. M., & Lee, S. I. (2017). A unified approach to interpreting model predictions. Advances in neural information processing systems, 30.
+║ [91mEditDistance:[0m 102
+╚════════════════════════════════════════════════════════════
+╔════════════════════════════════════════════════════════════
+║ [94mStudentRef:[0m
+║   Media Bias Fact Check. (2021a). About media bias fact check. (Accessed April 19, 2023. https://mediabiasfactcheck.com/about/)
+║ [92mScholarRef:[0m
+║   BIAS, O. P. DATA-DRIVEN NEWS OUTLET BIAS DETECTION WITH GDELT (Doctoral dissertation, tilburg university).
+║ [91mEditDistance:[0m 83
+╚════════════════════════════════════════════════════════════
+╔════════════════════════════════════════════════════════════
+║ [94mStudentRef:[0m
+║   NS, A. (2020). Deep learning for tabular data using pytorch. (Accessed March 15, 2023. https://jovian.ml/aakanksha-ns/shelter-outcome)
+║ [92mScholarRef:[0m
+║   BIAS, O. P. DATA-DRIVEN NEWS OUTLET BIAS DETECTION WITH GDELT (Doctoral dissertation, tilburg university).
+║ [91mEditDistance:[0m 83
+╚════════════════════════════════════════════════════════════
+╔════════════════════════════════════════════════════════════
+║ [94mStudentRef:[0m
+║   Media Bias Fact Check. (2023). Mbfc methodology. (Accessed March 20, 2023. https://mediabiasfactcheck.com/methodology/)
+║ [92mScholarRef:[0m
+║   BIAS, O. P. DATA-DRIVEN NEWS OUTLET BIAS DETECTION WITH GDELT (Doctoral dissertation, tilburg university).
+║ [91mEditDistance:[0m 78
+╚════════════════════════════════════════════════════════════
+╔════════════════════════════════════════════════════════════
+║ [94mStudentRef:[0m
+║   Brownlee, J. (2019).3ways to encode categorical variables for deep learn- ing. Retrieved from https://machinelearningmastery.com/how-to -prepare-categorical-data-for-deep-learning-in-python/ (Ac- cessed 15.03.2023)
+║ [92mScholarRef:[0m
+║   Brownlee, J. (2019). 3 Ways to Encode Categorical Variables for Deep Learning. Machine Learning Mastery.
+║ [91mEditDistance:[0m 64
+╚════════════════════════════════════════════════════════════
