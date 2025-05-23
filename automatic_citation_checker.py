@@ -13,7 +13,8 @@ Future implementations can probably do a simple text distance check to
 determine without manual control if the student's reference and the top result
 are similar enough.
 
-NOTE: it currently needs your input for which page range the references are on!
+FIXME: if the reference is not found, the script will crash. It should
+probably just return an empty string or None.
 NOTE: You will probably have to fill in some captchas yourself :/
 
 PACKAGES:
@@ -174,50 +175,36 @@ def check_citations_via_scholar(
     return scholar_citations, edit_distances
 
 
-def find_references_section_by_outline(pdf_name: str) -> Optional[List[int]]:
+def find_references_section_by_text(pdf_name: str) -> Optional[List[int]]:
     """
-    Find the 'References' section using PDF outlines/bookmarks.
+    Find the 'References' section by scanning for a page that starts with 
+    'References' and ends before a page that starts with 'Appendix'.
     Returns a list of page numbers if found, else None.
     """
     reader = PdfReader(pdf_name)
-    if not hasattr(reader, "outlines") or not reader.outlines:
-        return None
-
-    outlines = reader.outlines
     num_pages = len(reader.pages)
     start_page = None
     end_page = None
 
-    def flatten(outlines):
-        for item in outlines:
-            if isinstance(item, list):
-                yield from flatten(item)
-            else:
-                yield item
-
-    # Find the 'References' outline
-    for outline in flatten(outlines):
-        title = getattr(outline, "title", str(outline))
-        if title.strip().lower() == "references":
-            start_page = reader.get_destination_page_number(outline)
+    for i, page in enumerate(reader.pages):
+        text = page.extract_text() or ""
+        first_line = text.strip().split('\n', 1)[0].strip().lower()
+        if first_line.startswith("references"):
+            start_page = i
             break
 
     if start_page is None:
         return None
 
-    # Find the next outline after 'References'
-    next_pages = []
-    found = False
-    for outline in flatten(outlines):
-        title = getattr(outline, "title", str(outline))
-        page_num = reader.get_destination_page_number(outline)
-        if found and page_num > start_page:
-            next_pages.append(page_num)
-        if page_num == start_page:
-            found = True
-    if next_pages:
-        end_page = min(next_pages) - 1
-    else:
+    # Find the first page after start_page that starts with 'Appendix'
+    for i in range(start_page + 1, num_pages):
+        text = reader.pages[i].extract_text() or ""
+        first_line = text.strip().split('\n', 1)[0].strip().lower()
+        if first_line.startswith("appendix"):
+            end_page = i - 1
+            break
+
+    if end_page is None:
         end_page = num_pages - 1
 
     return list(range(start_page, end_page + 1))
@@ -228,11 +215,12 @@ def main():
     if args.references_page_range is not None:
         page_range = parse_page_range(args.references_page_range)
     else:
-        page_range = find_references_section_by_outline(args.pdf_name)
+        if page_range is None:
+            page_range = find_references_section_by_text(args.pdf_name)
         if page_range is None:
             print(
-                "Could not auto-detect the references section in the PDF"
-                " outline/bookmarks."
+                "Could not auto-detect the references section in the PDF "
+                "using outline or text search."
             )
             return
         print(f"Automatically detected reference pages: {page_range}")
