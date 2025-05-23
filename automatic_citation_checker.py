@@ -152,26 +152,39 @@ def check_citations_via_scholar(
     scholar_citations = []
     edit_distances = []
     for ref in references:
-        driver.get("https://scholar.google.com/")
-        ActionChains(driver).send_keys(ref).perform()
-        ActionChains(driver).send_keys(Keys.ENTER).perform()
-        driver.implicitly_wait(1)
-        citation_button = WebDriverWait(driver, 60).until(
-            EC.visibility_of_element_located((By.CLASS_NAME, "gs_or_cit"))
-        )
-        citation_button.click()
-        citations = driver.find_elements(By.CLASS_NAME, "gs_citr")
-        if len(citations) == 0:
-            scholar_citations.append("")
-            edit_distances.append(-1)
+        # Check if the reference contains a year (4-digit number)
+        if not re.search(r"\b\d{4}\b", ref):
+            scholar_citations.append("No Year Found")
+            edit_distances.append(999998)  # Large edit distance
             continue
-        apa_cite = citations[1].text
-        scholar_citations.append(apa_cite)
-        # Compute edit distance
-        norm_ref = normalize_reference(ref)
-        norm_apa = normalize_reference(apa_cite)
-        dist = edit_distance(norm_ref, norm_apa)
-        edit_distances.append(dist)
+
+        try:
+            driver.get("https://scholar.google.com/")
+            ActionChains(driver).send_keys(ref).perform()
+            ActionChains(driver).send_keys(Keys.ENTER).perform()
+            driver.implicitly_wait(1)
+            citation_button = WebDriverWait(driver, 10).until(
+                EC.visibility_of_element_located((By.CLASS_NAME, "gs_or_cit"))
+            )
+            citation_button.click()
+            citations = driver.find_elements(By.CLASS_NAME, "gs_citr")
+            if len(citations) == 0:
+                # No citations found
+                scholar_citations.append("Not Found")
+                edit_distances.append(999999)  # Large edit distance
+                continue
+            apa_cite = citations[1].text
+            scholar_citations.append(apa_cite)
+            # Compute edit distance
+            norm_ref = normalize_reference(ref)
+            norm_apa = normalize_reference(apa_cite)
+            dist = edit_distance(norm_ref, norm_apa)
+            edit_distances.append(dist)
+        except Exception as e:
+            # Handle cases where Google Scholar fails to load or find results
+            print(f"Error processing reference: {ref}. Error: {e}")
+            scholar_citations.append("Error")
+            edit_distances.append(999999)  # Large edit distance
     driver.close()
     return scholar_citations, edit_distances
 
@@ -224,10 +237,13 @@ def main():
             )
             return
         print(f"Automatically detected reference pages: {page_range}")
+    
     references = extract_references(args.pdf_name, page_range)
     scholar_citations, edit_distances = check_citations_via_scholar(
         references, args.browser
     )
+    
+    # Create the DataFrame
     output = pd.DataFrame(
         {
             "StudentRef": references,
@@ -235,7 +251,38 @@ def main():
             "EditDistance": edit_distances,
         }
     )
+    
+    # Clean up whitespace in titles
+    output["StudentRef"] = output["StudentRef"].str.strip()
+    output["ScholarRef"] = output["ScholarRef"].str.strip()
+    
+    # Separate references with high edit distances
+    not_found = output[output["EditDistance"] == 999999]
+    no_year = output[output["EditDistance"] == 999998]
+    
+    # Filter out these rows from the main table
+    output = output[(output["EditDistance"] != 999999) & (output["EditDistance"] != 999998)]
+    
+    # Sort the remaining rows by EditDistance in descending order
     output = output.sort_values(by="EditDistance", ascending=False)
+    
+    # Print the separated references
+    if not no_year.empty:
+        print("\nReferences with no year featured:")
+        for ref in no_year["StudentRef"]:
+            print(f"- {ref}")
+    
+    if not not_found.empty:
+        print("\nReferences not found on Google Scholar:")
+        for ref in not_found["StudentRef"]:
+            print(f"- {ref}")
+    
+    # Print the full DataFrame
+    print("\nProcessed References Table:")
+    pd.set_option("display.max_rows", None)  # Show all rows
+    pd.set_option("display.max_columns", None)  # Show all columns
+    pd.set_option("display.width", None)  # No truncation of columns
+    pd.set_option("display.colheader_justify", "left")  # Align headers to the left
     print(output)
 
 
