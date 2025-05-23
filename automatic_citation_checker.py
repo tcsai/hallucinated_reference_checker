@@ -32,6 +32,8 @@ from selenium.webdriver.common.action_chains import ActionChains
 from pypdf import PdfReader
 import pandas as pd
 import re
+import difflib
+import string
 
 
 def parse_args() -> argparse.Namespace:
@@ -44,8 +46,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--references_page_range",
         type=str,
-        help=("Page range for references, e.g., '23-25' (inclusive). If not"
-              "given, will auto-detect using PDF outline."),
+        help=(
+            "Page range for references, e.g., '23-25' (inclusive). If not"
+            "given, will auto-detect using PDF outline."
+        ),
     )
     parser.add_argument(
         "--browser",
@@ -119,21 +123,32 @@ def get_webdriver(browser: str):
         raise ValueError(f"Unsupported browser: {browser}")
 
 
+def normalize_reference(ref: str) -> str:
+    """Lowercase, remove punctuation, and extra spaces."""
+    ref = ref.lower()
+    ref = ref.translate(str.maketrans("", "", string.punctuation))
+    ref = re.sub(r"\s+", " ", ref)
+    return ref.strip()
+
+
+def edit_distance(a: str, b: str) -> int:
+    """Compute edit distance using SequenceMatcher."""
+    # difflib returns a ratio; convert to distance
+    sm = difflib.SequenceMatcher(None, a, b)
+    return int(max(len(a), len(b)) * (1 - sm.ratio()))
+
+
 def check_citations_via_scholar(
     references: List[str], browser: str
-) -> Tuple[List[str], List[str]]:
+) -> Tuple[List[str], List[int]]:
     """
     For each reference, search Google Scholar and retrieve the APA citation.
-    Args:
-        references: List of reference strings.
-        browser: Browser to use for Selenium.
-    Returns:
-        Tuple of (scholar_citations, ratings).
+    Returns the scholar citations and their edit distances to the original.
     """
     driver = get_webdriver(browser)
     driver.set_window_size(800, 800)
     scholar_citations = []
-    ratings = []
+    edit_distances = []
     for ref in references:
         driver.get("https://scholar.google.com/")
         ActionChains(driver).send_keys(ref).perform()
@@ -146,18 +161,17 @@ def check_citations_via_scholar(
         citations = driver.find_elements(By.CLASS_NAME, "gs_citr")
         if len(citations) == 0:
             scholar_citations.append("")
-            ratings.append("N")
+            edit_distances.append(-1)
             continue
         apa_cite = citations[1].text
         scholar_citations.append(apa_cite)
-        print(f"\n----\nThis is the student's citation: \n{ref}\n")
-        print(f"This is the top result on Google Scholar: \n{apa_cite}\n\n")
-        rating = input(
-            "Press enter to continue or 'N' if something seems off: "
-        )
-        ratings.append(rating)
+        # Compute edit distance
+        norm_ref = normalize_reference(ref)
+        norm_apa = normalize_reference(apa_cite)
+        dist = edit_distance(norm_ref, norm_apa)
+        edit_distances.append(dist)
     driver.close()
-    return scholar_citations, ratings
+    return scholar_citations, edit_distances
 
 
 def find_references_section_by_outline(pdf_name: str) -> Optional[List[int]]:
@@ -216,21 +230,24 @@ def main():
     else:
         page_range = find_references_section_by_outline(args.pdf_name)
         if page_range is None:
-            print("Could not auto-detect the references section in the PDF"
-                  " outline/bookmarks.")
+            print(
+                "Could not auto-detect the references section in the PDF"
+                " outline/bookmarks."
+            )
             return
         print(f"Automatically detected reference pages: {page_range}")
     references = extract_references(args.pdf_name, page_range)
-    scholar_citations, ratings = check_citations_via_scholar(
+    scholar_citations, edit_distances = check_citations_via_scholar(
         references, args.browser
     )
     output = pd.DataFrame(
         {
             "StudentRef": references,
             "ScholarRef": scholar_citations,
-            "Rating": ratings,
+            "EditDistance": edit_distances,
         }
     )
+    output = output.sort_values(by="EditDistance", ascending=False)
     print(output)
 
 
