@@ -3,15 +3,16 @@
 
 README:
 
-This is a quick and dirty script for checking the references of a student
-paper for potential hallucinated examples. It extracts all references from a
-.PDF file, opens a Firefox window and searches for that exact citation on
-Google Scholar. It gets the APA format, and lets you evaluate if it looks
-suspicious or not.
-
-Future implementations can probably do a simple text distance check to
-determine without manual control if the student's reference and the top result
-are similar enough.
+This is a less quick and dirty script for checking the references of a student
+paper for potential hallucinated examples. It extracts tries to detect where
+the references section starts, then extracts all references from the
+.PDF file, opens a (specified) browser window and searches for that exact
+citation on Google Scholar. It gets the APA format, and automatically
+evaluates the edit distance between the student's reference and the
+Google Scholar result. The script will then print a table with the
+references, the Google Scholar result, and the edit distance.
+The script is not perfect, and it will not work for all PDFs. It is
+recommended to manually verify the results.
 
 FIXME: if the reference is not found, the script will crash. It should
 probably just return an empty string or None.
