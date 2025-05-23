@@ -22,7 +22,7 @@ PACKAGES:
 """
 
 import argparse
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -44,8 +44,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--references_page_range",
         type=str,
-        required=True,
-        help="Page range for references, e.g., '23-25' (inclusive).",
+        help=("Page range for references, e.g., '23-25' (inclusive). If not"
+              "given, will auto-detect using PDF outline."),
     )
     parser.add_argument(
         "--browser",
@@ -160,9 +160,66 @@ def check_citations_via_scholar(
     return scholar_citations, ratings
 
 
+def find_references_section_by_outline(pdf_name: str) -> Optional[List[int]]:
+    """
+    Find the 'References' section using PDF outlines/bookmarks.
+    Returns a list of page numbers if found, else None.
+    """
+    reader = PdfReader(pdf_name)
+    if not hasattr(reader, "outlines") or not reader.outlines:
+        return None
+
+    outlines = reader.outlines
+    num_pages = len(reader.pages)
+    start_page = None
+    end_page = None
+
+    def flatten(outlines):
+        for item in outlines:
+            if isinstance(item, list):
+                yield from flatten(item)
+            else:
+                yield item
+
+    # Find the 'References' outline
+    for outline in flatten(outlines):
+        title = getattr(outline, "title", str(outline))
+        if title.strip().lower() == "references":
+            start_page = reader.get_destination_page_number(outline)
+            break
+
+    if start_page is None:
+        return None
+
+    # Find the next outline after 'References'
+    next_pages = []
+    found = False
+    for outline in flatten(outlines):
+        title = getattr(outline, "title", str(outline))
+        page_num = reader.get_destination_page_number(outline)
+        if found and page_num > start_page:
+            next_pages.append(page_num)
+        if page_num == start_page:
+            found = True
+    if next_pages:
+        end_page = min(next_pages) - 1
+    else:
+        end_page = num_pages - 1
+
+    return list(range(start_page, end_page + 1))
+
+
 def main():
     args = parse_args()
-    page_range = parse_page_range(args.references_page_range)
+    if args.references_page_range is not None:
+        page_range = parse_page_range(args.references_page_range)
+    else:
+        page_range = find_references_section_by_outline(args.pdf_name)
+        if page_range is None:
+            print("Could not auto-detect the references section in the PDF"
+                  " outline/bookmarks.")
+            return
+        print(f"Automatically detected reference pages: {page_range}")
     references = extract_references(args.pdf_name, page_range)
     scholar_citations, ratings = check_citations_via_scholar(
         references, args.browser
