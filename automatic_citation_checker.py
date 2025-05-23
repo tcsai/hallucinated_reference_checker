@@ -6,7 +6,7 @@ README:
 This is a quick and dirty script for checking the references of a student
 paper for potential hallucinated examples. It extracts all references from a
 .PDF file, opens a Firefox window and searches for that exact citation on
-Google Scholar. It gets the APA format, and lets you evaluate if it looks 
+Google Scholar. It gets the APA format, and lets you evaluate if it looks
 suspicious or not.
 
 Future implementations can probably do a simple text distance check to
@@ -35,7 +35,8 @@ import re
 
 
 def parse_args() -> argparse.Namespace:
-    """Parse command-line arguments for PDF name and reference page range."""
+    """Parse command-line arguments for PDF name, reference page range, and
+    browser."""
     parser = argparse.ArgumentParser(
         description="Check PDF references via Google Scholar."
     )
@@ -45,6 +46,13 @@ def parse_args() -> argparse.Namespace:
         type=str,
         required=True,
         help="Page range for references, e.g., '23-25' (inclusive).",
+    )
+    parser.add_argument(
+        "--browser",
+        type=str,
+        choices=["firefox", "chrome", "safari"],
+        default="firefox",
+        help="Browser to use for Selenium (default: firefox).",
     )
     return parser.parse_args()
 
@@ -83,17 +91,46 @@ def extract_references(
     return references
 
 
+def get_webdriver(browser: str):
+    """
+    Return a Selenium webdriver instance for the specified browser.
+    Args:
+        browser: Name of the browser ('firefox', 'chrome', 'safari').
+    Returns:
+        Selenium webdriver instance.
+    """
+    if browser == "firefox":
+        return webdriver.Firefox()
+    elif browser == "chrome":
+        return webdriver.Chrome()
+    elif browser == "safari":
+        return webdriver.Safari()
+    elif browser == "edge":
+        return webdriver.Edge()
+    elif browser == "opera":
+        return webdriver.Opera()
+    elif browser == "brave":
+        return webdriver.Brave()
+    elif browser == "internet_explorer":
+        raise NotImplementedError(
+            "Really? Internet Explorer? Good luck with that."
+        )
+    else:
+        raise ValueError(f"Unsupported browser: {browser}")
+
+
 def check_citations_via_scholar(
-    references: List[str],
+    references: List[str], browser: str
 ) -> Tuple[List[str], List[str]]:
     """
     For each reference, search Google Scholar and retrieve the APA citation.
     Args:
         references: List of reference strings.
+        browser: Browser to use for Selenium.
     Returns:
         Tuple of (scholar_citations, ratings).
     """
-    driver = webdriver.Firefox()
+    driver = get_webdriver(browser)
     driver.set_window_size(800, 800)
     scholar_citations = []
     ratings = []
@@ -127,7 +164,9 @@ def main():
     args = parse_args()
     page_range = parse_page_range(args.references_page_range)
     references = extract_references(args.pdf_name, page_range)
-    scholar_citations, ratings = check_citations_via_scholar(references)
+    scholar_citations, ratings = check_citations_via_scholar(
+        references, args.browser
+    )
     output = pd.DataFrame(
         {
             "StudentRef": references,
