@@ -1,23 +1,12 @@
 # -*- coding: utf-8 -*-
 """
-
 README:
 
-This is a less quick and dirty script for checking the references of a student
-paper for potential hallucinated examples. It tries to detect where
-the references section starts, then extracts all references from the
-.PDF file, opens a (specified) browser window and searches for that exact
-citation on Google Scholar. It gets the APA format, and automatically
-evaluates the edit distance between the student's reference and the
-Google Scholar result. The script will then print an overview of references
-that couldn't be found, the references it did find, the Google Scholar
-result, and the edit distance (can be tweaked using flags).
-The script is not perfect, and it will not work for all PDFs. It is
-recommended to manually verify the results.
-
-NOTE: If a ref is not found, just wait a bit, it will continue, we promise.
-NOTE: You will probably have to fill in some captchas yourself :/
-TODO: save the results to a .csv file so we don't have to re-poll GScholar
+This script checks the references of a student paper for hallucinated
+examples. It detects the references section, extracts all references from
+the PDF, and searches for each citation on DBLP and Google Scholar. It
+compares the student's reference to the found citation using edit distance,
+and prints an overview of flagged references.
 
 PACKAGES:
     selenium:    '4.32.0'
@@ -53,10 +42,10 @@ def get_terminal_width(default: int = 80) -> int:
     Get the width of the terminal window.
 
     Args:
-        default (int): Default width if terminal size cannot be determined.
+        default (int): Default width to return if detection fails.
 
     Returns:
-        int: Terminal width in characters.
+        int: Width of the terminal window in characters.
     """
     try:
         return shutil.get_terminal_size().columns
@@ -64,16 +53,16 @@ def get_terminal_width(default: int = 80) -> int:
         return default
 
 
-def word_wrap(text: str, width: int) -> list[str]:
+def word_wrap(text: str, width: int) -> List[str]:
     """
     Wrap text to the specified width at word boundaries.
 
     Args:
         text (str): The text to wrap.
-        width (int): The maximum width of each line.
+        width (int): The maximum line width.
 
     Returns:
-        list[str]: List of wrapped lines.
+        List[str]: List of wrapped lines.
     """
     return wrap(
         text, width=width, break_long_words=False, break_on_hyphens=False
@@ -85,56 +74,49 @@ def strip_ansi(text: str) -> str:
     Remove ANSI escape sequences from a string.
 
     Args:
-        text (str): String possibly containing ANSI codes.
+        text (str): The string to clean.
 
     Returns:
-        str: String with ANSI codes removed.
+        str: The cleaned string.
     """
     ansi_escape = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
     return ansi_escape.sub("", text)
 
 
 def print_boxed_section(
-    title: str, lines: list[str], color_code: str = ""
+    title: str, lines: List[str], color_code: str = ""
 ) -> None:
     """
-    Print a section in a Unicode box, wrapping lines and title to fit the
-    terminal, with correct padding even for colored/bold text.
+    Print a section in a Unicode box, wrapping lines and title.
 
     Args:
         title (str): The section title.
-        lines (list[str]): The lines to print inside the box.
-        color_code (str): Optional ANSI color code for the title.
+        lines (List[str]): The lines to print inside the box.
+        color_code (str, optional): ANSI color code for the title. Defaults
+            to "".
     """
     term_width = get_terminal_width()
-    box_width = max(min(term_width, 100), 40)  # Clamp width for readability
+    box_width = max(min(term_width, 100), 40)
 
-    # Prepare title, wrap if needed
     title_prefix = " " + title + " "
     max_title_width = box_width - 2
     title_lines = word_wrap(title_prefix, max_title_width)
 
-    # Prepare content lines, wrap if needed
     content_lines = []
     for line in lines:
         content_lines.extend(word_wrap(line, box_width - 2))
 
-    # Top border
     print("╔" + "═" * (box_width - 2) + "╗")
-    # Title lines
     for tline in title_lines:
         tline = tline[: box_width - 2]
         if color_code:
             tline = f"{color_code}{tline}\033[0m"
         pad = box_width - 3 - len(strip_ansi(tline))
         print("║" + tline + " " * pad + "║")
-    # Separator
     print("╟" + "─" * (box_width - 2) + "╢")
-    # Content lines
     for cline in content_lines:
         pad = box_width - 2 - len(strip_ansi(cline))
         print("║" + cline + " " * pad + "║")
-    # Bottom border
     print("╚" + "═" * (box_width - 2) + "╝")
 
 
@@ -142,12 +124,11 @@ def print_summary_tables(
     no_year: pd.DataFrame, not_found: pd.DataFrame
 ) -> None:
     """
-    Print summary tables for references with no year and not found references.
+    Print summary tables for references with no year and not found.
 
     Args:
         no_year (pd.DataFrame): DataFrame of references missing a year.
-        not_found (pd.DataFrame): DataFrame of references not found on Google
-            Scholar.
+        not_found (pd.DataFrame): DataFrame of references not found.
     """
     if not no_year.empty:
         lines = [f"• {ref}" for ref in no_year["StudentRef"]]
@@ -164,11 +145,11 @@ def print_summary_tables(
 
 def print_flagged_references(flagged: pd.DataFrame, threshold: int) -> None:
     """
-    Print references whose edit distance exceeds the specified threshold.
+    Print references whose edit distance exceeds the threshold.
 
     Args:
         flagged (pd.DataFrame): DataFrame of flagged references.
-        threshold (int): Edit distance threshold.
+        threshold (int): Edit distance threshold for flagging.
     """
     if not flagged.empty:
         for _, row in flagged.iterrows():
@@ -184,7 +165,6 @@ def print_flagged_references(flagged: pd.DataFrame, threshold: int) -> None:
                 f"    {row['Citation']}",
                 "",
                 "  \033[91mTitle Edit Distance:\033[0m",
-                "    ",  # Extra line for padding above edit distance value
                 f"    {row['EditDistance']}",
             ]
             print_boxed_section(
@@ -201,17 +181,17 @@ def print_flagged_references(flagged: pd.DataFrame, threshold: int) -> None:
 
 
 def save_log_if_needed(
-    args: argparse.Namespace, log_buffer: StringIO, orig_stdout
+    args: argparse.Namespace, log_buffer: Optional[StringIO], orig_stdout
 ) -> None:
     """
     Save the printed output to a log file if the log_output flag is set.
 
     Args:
         args (argparse.Namespace): Parsed command-line arguments.
-        log_buffer (StringIO): Buffer containing printed output.
+        log_buffer (Optional[StringIO]): Buffer containing log output.
         orig_stdout: Original sys.stdout to restore.
     """
-    if args.log_output:
+    if args.log_output and log_buffer is not None:
         sys.stdout = orig_stdout
         log_filename = os.path.basename(args.pdf_name) + ".log"
         with open(log_filename, "w", encoding="utf-8") as f:
@@ -221,20 +201,20 @@ def save_log_if_needed(
 
 def process_references(
     args: argparse.Namespace,
-    references: list[str],
-    citations: list[str],
-    sources: list[str],
-    edit_distances: list[int],
+    references: List[str],
+    citations: List[str],
+    sources: List[str],
+    edit_distances: List[int],
 ) -> None:
     """
     Process and print the results of the reference checking.
 
     Args:
         args (argparse.Namespace): Parsed command-line arguments.
-        references (list[str]): List of student references.
-        citations (list[str]): List of citations from DBLP or GScholar.
-        sources (list[str]): List of sources ("DBLP" or "Scholar").
-        edit_distances (list[int]): List of edit distances between references.
+        references (List[str]): List of student references.
+        citations (List[str]): List of citations from DBLP or Scholar.
+        sources (List[str]): List of sources ("DBLP" or "Scholar").
+        edit_distances (List[int]): List of edit distances between references.
     """
     output = pd.DataFrame(
         {
@@ -250,7 +230,8 @@ def process_references(
     not_found = output[output["EditDistance"] == 999999]
     no_year = output[output["EditDistance"] == 999998]
     filtered = output[
-        (output["EditDistance"] != 999999) & (output["EditDistance"] != 999998)
+        (output["EditDistance"] != 999999)
+        & (output["EditDistance"] != 999998)
     ].sort_values(by="EditDistance", ascending=False)
     flagged = filtered[filtered["EditDistance"] > args.max_edit_distance]
 
@@ -280,8 +261,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--references_page_range",
         type=str,
-        help="Page range for references, e.g., '23-25' (inclusive). If not "
-        "given, will auto-detect.",
+        help="Page range for references, e.g., '23-25' (inclusive).",
     )
     parser.add_argument(
         "--browser",
@@ -294,14 +274,12 @@ def parse_args() -> argparse.Namespace:
         "--max_edit_distance",
         type=int,
         default=30,
-        help="Maximum edit distance to consider a reference as matching "
-        "(default: 30).",
+        help="Maximum edit distance to consider a reference as matching.",
     )
     parser.add_argument(
         "--log_output",
         action="store_true",
-        help="If set, also save the printed output to a log file named "
-        "after the input PDF.",
+        help="If set, also save the printed output to a log file.",
     )
     parser.add_argument(
         "--print_dataframe",
@@ -312,9 +290,7 @@ def parse_args() -> argparse.Namespace:
         "--captcha_time",
         type=int,
         default=10,
-        help="Time to wait for captcha solving (default: 10 seconds). "
-        "If you're running out of time, increase this, but it will also "
-        "increase the waiting time when no hit is found.",
+        help="Time to wait for captcha solving (default: 10 seconds).",
     )
     return parser.parse_args()
 
@@ -324,10 +300,10 @@ def parse_page_range(page_range_str: str) -> List[int]:
     Parse a page range string like '23-25' into a list of integers.
 
     Args:
-        page_range_str (str): Page range string in the format 'start-end'.
+        page_range_str (str): Page range string, e.g., '23-25'.
 
     Returns:
-        List[int]: List of page numbers in the specified range (inclusive).
+        List[int]: List of page numbers (inclusive).
     """
     start, end = map(int, page_range_str.split("-"))
     return list(range(start, end + 1))
@@ -341,8 +317,7 @@ def extract_references(
 
     Args:
         pdf_name (str): Path to the PDF file.
-        references_page_range (List[int]): List of page numbers to extract
-            references from.
+        references_page_range (List[int]): List of page numbers to extract.
 
     Returns:
         List[str]: List of extracted reference strings.
@@ -369,14 +344,13 @@ def get_webdriver(browser: str):
     Return a Selenium webdriver instance for the specified browser.
 
     Args:
-        browser (str): Name of the browser ('firefox', 'chrome', etc.).
+        browser (str): Name of the browser ("firefox", "chrome", "safari").
 
     Returns:
-        selenium.webdriver: Selenium webdriver instance.
+        selenium.webdriver: Selenium WebDriver instance.
 
     Raises:
         ValueError: If the browser is not supported.
-        NotImplementedError: If Internet Explorer is selected.
     """
     if browser == "firefox":
         return webdriver.Firefox()
@@ -384,24 +358,13 @@ def get_webdriver(browser: str):
         return webdriver.Chrome()
     elif browser == "safari":
         return webdriver.Safari()
-    elif browser == "edge":
-        return webdriver.Edge()
-    elif browser == "opera":
-        return webdriver.Opera()
-    elif browser == "brave":
-        return webdriver.Brave()
-    elif browser == "internet_explorer":
-        raise NotImplementedError(
-            "Really? Internet Explorer? Good luck with that."
-        )
     else:
         raise ValueError(f"Unsupported browser: {browser}")
 
 
 def normalize_reference(ref: str) -> str:
     """
-    Normalize a reference string by lowercasing, removing punctuation, and
-    extra spaces.
+    Normalize a reference string for comparison.
 
     Args:
         ref (str): Reference string.
@@ -434,16 +397,14 @@ def edit_distance(a: str, b: str) -> int:
 
 def check_dblp(reference: str) -> Optional[str]:
     """
-    Check if a reference exists in DBLP and return the best matching citation
-    if found.
+    Check if a reference exists in DBLP and return the best matching citation.
 
     Args:
-        reference (str): The reference string to search for.
+        reference (str): Reference string to search.
 
     Returns:
-        Optional[str]: The DBLP citation string if found, else None.
+        Optional[str]: Formatted DBLP citation if found, else None.
     """
-    # DBLP API: https://dblp.org/search/publ/api?q=...
     url = "https://dblp.org/search/publ/api"
     params = {"q": reference, "format": "json", "h": 1}
     try:
@@ -453,26 +414,24 @@ def check_dblp(reference: str) -> Optional[str]:
         hits = data.get("result", {}).get("hits", {}).get("hit", [])
         if hits:
             info = hits[0].get("info", {})
-            # Compose a simple citation string (customize as needed)
             try:
                 authors = [
                     author.get("text", "")
                     for author in info.get("authors", {}).get("author", [])
                 ]
-            except Exception as e:
-                pass
-            if isinstance(authors, list):
-                author_str = ", ".join([a for a in authors if a])
-            else:
-                author_str = authors
+            except Exception:
+                authors = []
+            author_str = (
+                ", ".join([a for a in authors if a])
+                if isinstance(authors, list)
+                else authors
+            )
             title = info.get("title", "")
             year = info.get("year", "")
             venue = info.get("venue", "")
             dblp_citation = f"{author_str} ({year}). {title}. {venue}."
             return dblp_citation
-        else:
-            return None
-    except Exception as e:
+    except Exception:
         pass
     return None
 
@@ -482,10 +441,10 @@ def extract_apa_title(reference: str) -> Optional[str]:
     Extract the first author and title from an APA-style reference string.
 
     Args:
-        reference (str): The APA-style reference.
+        reference (str): APA-style reference string.
 
     Returns:
-        Optional[str]: The extracted title, or None if not found.
+        Optional[str]: Extracted author and title string, or None if not found.
     """
     query = ""
     match = re.search(r"^(.+?)\s*\(\d{4}\)", reference)
@@ -497,17 +456,81 @@ def extract_apa_title(reference: str) -> Optional[str]:
     return query
 
 
-def check_citations_via_scholar(
+def get_citation_from_scholar(
+    driver, ref: str, captcha_time: int
+) -> Tuple[str, str, int]:
+    """
+    Search Google Scholar for a reference and return the citation, source,
+    and edit distance.
+
+    Args:
+        driver: Selenium WebDriver instance.
+        ref (str): Reference string to search.
+        captcha_time (int): Time to wait for captcha solving.
+
+    Returns:
+        Tuple[str, str, int]: (citation, source, edit_distance)
+    """
+    try:
+        driver.get("https://scholar.google.com/")
+        ActionChains(driver).send_keys(ref).perform()
+        ActionChains(driver).send_keys(Keys.ENTER).perform()
+        driver.implicitly_wait(1)
+        try:
+            WebDriverWait(driver, 1).until(
+                lambda d: d.find_elements(By.CLASS_NAME, "gs_or_cit")
+                or d.find_elements(By.ID, "gs_captcha_ccl")
+            )
+        except TimeoutException:
+            return "Not Found", "Error", 999999
+
+        try:
+            if driver.find_element(By.ID, "gs_captcha_ccl"):
+                WebDriverWait(driver, captcha_time).until(
+                    lambda d: d.find_elements(By.CLASS_NAME, "gs_or_cit")
+                )
+                citation_button = driver.find_element(
+                    By.CLASS_NAME, "gs_or_cit"
+                )
+                citation_button.click()
+        except NoSuchElementException:
+            citation_button = driver.find_element(By.CLASS_NAME, "gs_or_cit")
+            citation_button.click()
+
+        citations_list = driver.find_elements(By.CLASS_NAME, "gs_citr")
+        if len(citations_list) == 0:
+            return "Not Found", "Error", 999999
+        apa_cite = citations_list[1].text
+        norm_ref = normalize_reference(ref)
+        norm_apa = normalize_reference(apa_cite)
+        dist = edit_distance(norm_ref, norm_apa)
+        return apa_cite, "Scholar", dist
+    except Exception:
+        return "Error", "Error", 999999
+
+
+def check_references(
     references: List[str], browser: str, captcha_time: int
 ) -> Tuple[List[str], List[str], List[int]]:
     """
-    For each reference, first check DBLP, then Google Scholar if not found.
-    Returns the citation, their sources, and their edit distances to the
-    original.
+    For each reference, check DBLP first, then Google Scholar if not found.
+    Returns lists of citations, their sources, and edit distances.
+
+    Args:
+        references (List[str]): List of reference strings.
+        browser (str): Browser to use for Selenium.
+        captcha_time (int): Time to wait for captcha solving.
+
+    Returns:
+        Tuple[List[str], List[str], List[int]]:
+            citations (List[str]): Citations found or error messages.
+            sources (List[str]): Source of each citation ("DBLP", "Scholar", 
+                or "Error").
+            edit_distances (List[int]): Edit distances for each reference.
     """
-    citations = []
-    sources = []
-    edit_distances = []
+    citations: List[str] = []
+    sources: List[str] = []
+    edit_distances: List[int] = []
     driver = get_webdriver(browser)
     driver.set_window_size(800, 800)
     for ref in tqdm(references):
@@ -517,7 +540,6 @@ def check_citations_via_scholar(
             edit_distances.append(999998)
             continue
 
-        # DBLP check
         title = extract_apa_title(ref)
         dblp_query = title if title else ref
         dblp_citation = check_dblp(dblp_query)
@@ -530,64 +552,19 @@ def check_citations_via_scholar(
             edit_distances.append(dist)
             continue
 
-        # Fallback to Scholar
-        try:
-            driver.get("https://scholar.google.com/")
-            ActionChains(driver).send_keys(ref).perform()
-            ActionChains(driver).send_keys(Keys.ENTER).perform()
-            try:
-                # Wait for either a citation button or a captcha to appear
-                WebDriverWait(driver, 1).until(
-                    lambda d: d.find_elements(By.CLASS_NAME, "gs_or_cit")
-                    or d.find_elements(By.ID, "gs_captcha_ccl")
-                )
-            except TimeoutException:
-                # Neither citation nor captcha appeared in time
-                citations.append("Not Found")
-                sources.append("Error")
-                edit_distances.append(999999)
-                continue
-
-            # If captcha is present, let user solve it and wait again
-            try:
-                if driver.find_element(By.ID, "gs_captcha_ccl"):
-                    # Wait for the citation button after captcha is solved
-                    WebDriverWait(driver, captcha_time).until(
-                        lambda d: d.find_elements(By.CLASS_NAME, "gs_or_cit")
-                    )
-                    citation_button = driver.find_element(
-                        By.CLASS_NAME, "gs_or_cit"
-                    )
-                    citation_button.click()
-            except NoSuchElementException:
-                citation_button = driver.find_element(
-                    By.CLASS_NAME, "gs_or_cit"
-                )
-                citation_button.click()
-
-            # Now try to get the citation
-            citations_list = driver.find_elements(By.CLASS_NAME, "gs_citr")
-            if len(citations_list) == 0:
-                citations.append("Not Found")
-                sources.append("Error")
-                edit_distances.append(999999)
-                continue
-            apa_cite = citations_list[1].text
-            citations.append(apa_cite)
-            sources.append("Scholar")
-            norm_ref = normalize_reference(ref)
-            norm_apa = normalize_reference(apa_cite)
-            dist = edit_distance(norm_ref, norm_apa)
-            edit_distances.append(dist)
-        except Exception:
-            citations.append("Error")
-            sources.append("Error")
-            edit_distances.append(999999)
+        scholar_cite, scholar_source, scholar_dist = get_citation_from_scholar(
+            driver, ref, captcha_time
+        )
+        citations.append(scholar_cite)
+        sources.append(scholar_source)
+        edit_distances.append(scholar_dist)
     driver.close()
     return citations, sources, edit_distances
 
 
-def find_references_section_by_text(pdf_name: str) -> Optional[List[int]]:
+def find_references_section_by_text(
+    pdf_name: str,
+) -> Optional[List[int]]:
     """
     Find the 'References' section by scanning for a page that starts with
     'References' and ends before a page that starts with 'Appendix'.
@@ -596,7 +573,8 @@ def find_references_section_by_text(pdf_name: str) -> Optional[List[int]]:
         pdf_name (str): Path to the PDF file.
 
     Returns:
-        Optional[List[int]]: List of page numbers if found, else None.
+        Optional[List[int]]: List of reference page numbers, or None if not
+            found.
     """
     reader = PdfReader(pdf_name)
     num_pages = len(reader.pages)
@@ -613,7 +591,6 @@ def find_references_section_by_text(pdf_name: str) -> Optional[List[int]]:
     if start_page is None:
         return None
 
-    # Find the first page after start_page that starts with 'Appendix'
     for i in range(start_page + 1, num_pages):
         text = reader.pages[i].extract_text() or ""
         first_line = text.strip().split("\n", 1)[0].strip().lower()
@@ -631,6 +608,9 @@ def main() -> None:
     """
     Main entry point for the script. Handles argument parsing, reference
     extraction, citation checking, result processing, and optional logging.
+
+    Returns:
+        None
     """
     args = parse_args()
     log_buffer = None
@@ -657,7 +637,7 @@ def main() -> None:
             )
 
         references = extract_references(args.pdf_name, page_range)
-        citations, sources, edit_distances = check_citations_via_scholar(
+        citations, sources, edit_distances = check_references(
             references, args.browser, args.captcha_time
         )
         process_references(
