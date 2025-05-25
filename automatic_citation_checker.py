@@ -36,6 +36,7 @@ from textwrap import wrap
 from typing import List, Optional, Tuple
 
 import pandas as pd
+import requests
 from pypdf import PdfReader
 from selenium import webdriver
 from selenium.webdriver.common.action_chains import ActionChains
@@ -43,6 +44,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
+from tqdm import tqdm
 
 
 def get_terminal_width(default: int = 80) -> int:
@@ -77,9 +79,6 @@ def word_wrap(text: str, width: int) -> list[str]:
     )
 
 
-import re
-
-
 def strip_ansi(text: str) -> str:
     """
     Remove ANSI escape sequences from a string.
@@ -90,8 +89,9 @@ def strip_ansi(text: str) -> str:
     Returns:
         str: String with ANSI codes removed.
     """
-    ansi_escape = re.compile(r'\x1B\[[0-?]*[ -/]*[@-~]')
-    return ansi_escape.sub('', text)
+    ansi_escape = re.compile(r"\x1B\[[0-?]*[ -/]*[@-~]")
+    return ansi_escape.sub("", text)
+
 
 def print_boxed_section(
     title: str, lines: list[str], color_code: str = ""
@@ -145,7 +145,7 @@ def print_summary_tables(
 
     Args:
         no_year (pd.DataFrame): DataFrame of references missing a year.
-        not_found (pd.DataFrame): DataFrame of references not found on Google 
+        not_found (pd.DataFrame): DataFrame of references not found on Google
             Scholar.
     """
     if not no_year.empty:
@@ -173,13 +173,16 @@ def print_flagged_references(flagged: pd.DataFrame, threshold: int) -> None:
         for _, row in flagged.iterrows():
             lines = [
                 "",
-                "  \033[94mStudentRef:\033[0m",
+                "  \033[94mStudent:\033[0m",
                 f"    {row['StudentRef']}",
                 "",
-                "  \033[92mScholarRef:\033[0m",
-                f"    {row['ScholarRef']}",
+                "  \033[96mSource:\033[0m",
+                f"    {row['Source']}",
                 "",
-                "  \033[91mEditDistance:\033[0m",
+                "  \033[92mCitation:\033[0m",
+                f"    {row['Citation']}",
+                "",
+                "  \033[91mTitle Edit Distance:\033[0m",
                 "    ",  # Extra line for padding above edit distance value
                 f"    {row['EditDistance']}",
             ]
@@ -188,6 +191,12 @@ def print_flagged_references(flagged: pd.DataFrame, threshold: int) -> None:
                 lines,
                 "\033[1m",
             )
+    else:
+        print_boxed_section(
+            "✅ All clear!",
+            ["No references flagged for exceeding specified edit distance."],
+            "\033[1m"
+        )
 
 
 def save_log_if_needed(
@@ -212,7 +221,8 @@ def save_log_if_needed(
 def process_references(
     args: argparse.Namespace,
     references: list[str],
-    scholar_citations: list[str],
+    citations: list[str],
+    sources: list[str],
     edit_distances: list[int],
 ) -> None:
     """
@@ -221,18 +231,20 @@ def process_references(
     Args:
         args (argparse.Namespace): Parsed command-line arguments.
         references (list[str]): List of student references.
-        scholar_citations (list[str]): List of citations from Google Scholar.
+        citations (list[str]): List of citations from DBLP or GScholar.
+        sources (list[str]): List of sources ("DBLP" or "Scholar").
         edit_distances (list[int]): List of edit distances between references.
     """
     output = pd.DataFrame(
         {
             "StudentRef": references,
-            "ScholarRef": scholar_citations,
+            "Source": sources,
+            "Citation": citations,
             "EditDistance": edit_distances,
         }
     )
     output["StudentRef"] = output["StudentRef"].str.strip()
-    output["ScholarRef"] = output["ScholarRef"].str.strip()
+    output["Citation"] = output["Citation"].str.strip()
 
     not_found = output[output["EditDistance"] == 999999]
     no_year = output[output["EditDistance"] == 999998]
@@ -413,37 +425,110 @@ def edit_distance(a: str, b: str) -> int:
     Returns:
         int: Edit distance between the two strings.
     """
-    sm = difflib.SequenceMatcher(None, a, b)
+    sm = difflib.SequenceMatcher(
+        None, extract_apa_title(a), extract_apa_title(b)
+    )
     return int(max(len(a), len(b)) * (1 - sm.ratio()))
+
+
+def check_dblp(reference: str) -> Optional[str]:
+    """
+    Check if a reference exists in DBLP and return the best matching citation
+    if found.
+
+    Args:
+        reference (str): The reference string to search for.
+
+    Returns:
+        Optional[str]: The DBLP citation string if found, else None.
+    """
+    # DBLP API: https://dblp.org/search/publ/api?q=...
+    url = "https://dblp.org/search/publ/api"
+    params = {"q": reference, "format": "json", "h": 1}
+    try:
+        resp = requests.get(url, params=params, timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+        hits = data.get("result", {}).get("hits", {}).get("hit", [])
+        if hits:
+            info = hits[0].get("info", {})
+            # Compose a simple citation string (customize as needed)
+            try:
+                authors = [
+                    author.get("text", "")
+                    for author in info.get("authors", {}).get("author", [])
+                ]
+            except Exception as e:
+                pass
+            if isinstance(authors, list):
+                author_str = ", ".join([a for a in authors if a])
+            else:
+                author_str = authors
+            title = info.get("title", "")
+            year = info.get("year", "")
+            venue = info.get("venue", "")
+            dblp_citation = f"{author_str} ({year}). {title}. {venue}."
+            return dblp_citation
+        else:
+            return None
+    except Exception as e:
+        pass
+    return None
+
+
+def extract_apa_title(reference: str) -> Optional[str]:
+    """
+    Extract the first author and title from an APA-style reference string.
+
+    Args:
+        reference (str): The APA-style reference.
+
+    Returns:
+        Optional[str]: The extracted title, or None if not found.
+    """
+    query = ""
+    match = re.search(r"^(.+?)\s*\(\d{4}\)", reference)
+    if match:
+        query += match.group(1).strip()
+    match = re.search(r"\(\d{4}\)\.\s*(.+?)\.\s", reference)
+    if match:
+        query += " " + match.group(1).strip()
+    return query
 
 
 def check_citations_via_scholar(
     references: List[str], browser: str, captcha_time: int
-) -> Tuple[List[str], List[int]]:
+) -> Tuple[List[str], List[str], List[int]]:
     """
-    For each reference, search Google Scholar and retrieve the APA citation.
-    Returns the scholar citations and their edit distances to the original.
-
-    Args:
-        references (List[str]): List of reference strings to check.
-        browser (str): Browser to use for Selenium.
-        captcha_time (int): Time to wait for captcha solving.
-
-    Returns:
-        Tuple[List[str], List[int]]: Scholar citations and their edit
-            distances.
+    For each reference, first check DBLP, then Google Scholar if not found.
+    Returns the citation, their sources, and their edit distances to the original.
     """
+    citations = []
+    sources = []
+    edit_distances = []
     driver = get_webdriver(browser)
     driver.set_window_size(800, 800)
-    scholar_citations = []
-    edit_distances = []
-    for ref in references:
-        # Check if the reference contains a year (4-digit number)
+    for ref in tqdm(references):
         if not re.search(r"\b\d{4}\b", ref):
-            scholar_citations.append("No Year Found")
-            edit_distances.append(999998)  # Large edit distance
+            citations.append("No Year Found")
+            sources.append("Error")
+            edit_distances.append(999998)
             continue
 
+        # DBLP check
+        title = extract_apa_title(ref)
+        dblp_query = title if title else ref
+        dblp_citation = check_dblp(dblp_query)
+        if dblp_citation:
+            citations.append(dblp_citation)
+            sources.append("DBLP")
+            norm_ref = normalize_reference(ref)
+            norm_dblp = normalize_reference(dblp_citation)
+            dist = edit_distance(norm_ref, norm_dblp)
+            edit_distances.append(dist)
+            continue
+
+        # Fallback to Scholar
         try:
             driver.get("https://scholar.google.com/")
             ActionChains(driver).send_keys(ref).perform()
@@ -453,25 +538,25 @@ def check_citations_via_scholar(
                 EC.visibility_of_element_located((By.CLASS_NAME, "gs_or_cit"))
             )
             citation_button.click()
-            citations = driver.find_elements(By.CLASS_NAME, "gs_citr")
-            if len(citations) == 0:
-                # No citations found
-                scholar_citations.append("Not Found")
-                edit_distances.append(999999)  # Large edit distance
+            citations_list = driver.find_elements(By.CLASS_NAME, "gs_citr")
+            if len(citations_list) == 0:
+                citations.append("Not Found")
+                sources.append("Error")
+                edit_distances.append(999999)
                 continue
-            apa_cite = citations[1].text
-            scholar_citations.append(apa_cite)
-            # Compute edit distance
+            apa_cite = citations_list[1].text
+            citations.append(apa_cite)
+            sources.append("Scholar")
             norm_ref = normalize_reference(ref)
             norm_apa = normalize_reference(apa_cite)
             dist = edit_distance(norm_ref, norm_apa)
             edit_distances.append(dist)
-        except Exception as e:
-            # Handle cases where Google Scholar fails to load or find results
-            scholar_citations.append("Error")
-            edit_distances.append(999999)  # Large edit distance
+        except Exception:
+            citations.append("Error")
+            sources.append("Error")
+            edit_distances.append(999999)
     driver.close()
-    return scholar_citations, edit_distances
+    return citations, sources, edit_distances
 
 
 def find_references_section_by_text(pdf_name: str) -> Optional[List[int]]:
@@ -540,14 +625,16 @@ def main() -> None:
             print_boxed_section(
                 "📄 Automatically detected reference pages",
                 [f"{page_range}"],
-                "\033[1m"
+                "\033[1m",
             )
 
         references = extract_references(args.pdf_name, page_range)
-        scholar_citations, edit_distances = check_citations_via_scholar(
+        citations, sources, edit_distances = check_citations_via_scholar(
             references, args.browser, args.captcha_time
         )
-        process_references(args, references, scholar_citations, edit_distances)
+        process_references(
+            args, references, citations, sources, edit_distances
+        )
     finally:
         save_log_if_needed(args, log_buffer, orig_stdout)
 
