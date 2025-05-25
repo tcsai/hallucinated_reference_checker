@@ -39,6 +39,7 @@ import pandas as pd
 import requests
 from pypdf import PdfReader
 from selenium import webdriver
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
@@ -157,7 +158,7 @@ def print_summary_tables(
     if not not_found.empty:
         lines = [f"• {ref}" for ref in not_found["StudentRef"]]
         print_boxed_section(
-            "🔍 References not found on Google Scholar", lines, "\033[1m"
+            "🔍 References not found on DBLP or Scholar", lines, "\033[1m"
         )
 
 
@@ -195,7 +196,7 @@ def print_flagged_references(flagged: pd.DataFrame, threshold: int) -> None:
         print_boxed_section(
             "✅ All clear!",
             ["No references flagged for exceeding specified edit distance."],
-            "\033[1m"
+            "\033[1m",
         )
 
 
@@ -501,7 +502,8 @@ def check_citations_via_scholar(
 ) -> Tuple[List[str], List[str], List[int]]:
     """
     For each reference, first check DBLP, then Google Scholar if not found.
-    Returns the citation, their sources, and their edit distances to the original.
+    Returns the citation, their sources, and their edit distances to the
+    original.
     """
     citations = []
     sources = []
@@ -533,11 +535,37 @@ def check_citations_via_scholar(
             driver.get("https://scholar.google.com/")
             ActionChains(driver).send_keys(ref).perform()
             ActionChains(driver).send_keys(Keys.ENTER).perform()
-            driver.implicitly_wait(1)
-            citation_button = WebDriverWait(driver, captcha_time).until(
-                EC.visibility_of_element_located((By.CLASS_NAME, "gs_or_cit"))
-            )
-            citation_button.click()
+            try:
+                # Wait for either a citation button or a captcha to appear
+                WebDriverWait(driver, 1).until(
+                    lambda d: d.find_elements(By.CLASS_NAME, "gs_or_cit")
+                    or d.find_elements(By.ID, "gs_captcha_ccl")
+                )
+            except TimeoutException:
+                # Neither citation nor captcha appeared in time
+                citations.append("Not Found")
+                sources.append("Error")
+                edit_distances.append(999999)
+                continue
+
+            # If captcha is present, let user solve it and wait again
+            try:
+                if driver.find_element(By.ID, "gs_captcha_ccl"):
+                    # Wait for the citation button after captcha is solved
+                    WebDriverWait(driver, captcha_time).until(
+                        lambda d: d.find_elements(By.CLASS_NAME, "gs_or_cit")
+                    )
+                    citation_button = driver.find_element(
+                        By.CLASS_NAME, "gs_or_cit"
+                    )
+                    citation_button.click()
+            except NoSuchElementException:
+                citation_button = driver.find_element(
+                    By.CLASS_NAME, "gs_or_cit"
+                )
+                citation_button.click()
+
+            # Now try to get the citation
             citations_list = driver.find_elements(By.CLASS_NAME, "gs_citr")
             if len(citations_list) == 0:
                 citations.append("Not Found")
