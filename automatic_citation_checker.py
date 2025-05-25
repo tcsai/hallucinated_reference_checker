@@ -125,7 +125,7 @@ class TerminalDisplay(object):
         print("╟" + "─" * (self.box_width - 2) + "╢")
         for cline in content_lines:
             pad = self.box_width - 2 - len(self.strip_ansi(cline))
-            print("║" + cline + " " * pad + "║")
+            print("║ " + cline + " " * (pad - 1) + "║")
         print("╚" + "═" * (self.box_width - 2) + "╝")
 
     def print_summary_tables(
@@ -187,6 +187,38 @@ class TerminalDisplay(object):
                 ["No references flagged for exceeding set edit distance."],
                 "\033[1m",
             )
+
+
+def report_results(
+    df: pd.DataFrame, args: argparse.Namespace, term: TerminalDisplay
+) -> None:
+    """
+    Print summary and flagged references from the results DataFrame.
+
+    Args:
+        df (pd.DataFrame): DataFrame with reference checking results.
+        args (argparse.Namespace): Parsed command-line arguments.
+        term (TerminalDisplay): Terminal display helper.
+    """
+    not_found = df[df["EditDistance"] == 999999]
+    no_year = df[df["EditDistance"] == 999998]
+    filtered = df[
+        (df["EditDistance"] != 999999) & (df["EditDistance"] != 999998)
+    ].sort_values(by="EditDistance", ascending=False)
+    flagged = filtered[filtered["EditDistance"] > args.max_edit_distance]
+
+    term.print_summary_tables(no_year, not_found)
+    term.print_flagged_references(flagged, args.max_edit_distance)
+
+    if getattr(args, "print_dataframe", False):
+        term.print_boxed_section(
+            "📋 \033[1mProcessed References Table:\033[0m", [filtered]
+        )
+        pd.set_option("display.max_rows", None)
+        pd.set_option("display.max_columns", None)
+        pd.set_option("display.width", None)
+        pd.set_option("display.colheader_justify", "left")
+        print(filtered)
 
 
 def save_log_if_needed(
@@ -563,6 +595,93 @@ def parse_page_range(page_range_str: str) -> List[int]:
     return list(range(start, end + 1))
 
 
+def get_reference_page_range(
+    args: argparse.Namespace, term: TerminalDisplay
+) -> List[int]:
+    """
+    Determine the page range for references, either from args or by auto-detect.
+
+    Args:
+        args (argparse.Namespace): Parsed command-line arguments.
+        term (TerminalDisplay): Terminal display helper.
+
+    Returns:
+        List[int]: List of page numbers for the references section.
+
+    Raises:
+        SystemExit: If the references section cannot be detected.
+    """
+    if args.references_page_range is not None:
+        return parse_page_range(args.references_page_range)
+    else:
+        page_range = find_references_section_by_text(args.pdf_name)
+        if page_range is None:
+            print(
+                "Could not auto-detect the references section in the PDF "
+                "using outline or text search."
+            )
+            sys.exit(1)
+        term.print_boxed_section(
+            "📄 Automatically detected reference pages",
+            [f"{page_range}"],
+            "\033[1m",
+        )
+        return page_range
+
+def load_or_compute_results(
+    args: argparse.Namespace, term: TerminalDisplay
+) -> pd.DataFrame:
+    """
+    Load results from CSV if available and not overwriting, otherwise compute
+    and save new results.
+
+    Args:
+        args (argparse.Namespace): Parsed command-line arguments.
+        term (TerminalDisplay): Terminal display helper.
+
+    Returns:
+        pd.DataFrame: DataFrame with reference checking results.
+    """
+    csv_path = os.path.splitext(args.pdf_name)[0] + ".csv"
+    required_cols = {"StudentRef", "Source", "Citation", "EditDistance"}
+
+    # Try to load CSV unless overwrite is requested
+    if os.path.exists(csv_path) and not args.overwrite_csv:
+        df = pd.read_csv(csv_path)
+        if not required_cols.issubset(df.columns):
+            print(
+                f"CSV file {csv_path} is missing required columns. "
+                "Recomputing..."
+            )
+            df = None
+        else:
+            term.print_boxed_section(
+                "📦 Loaded cached results",
+                [f"{csv_path} exists; invoke --overwrite_csv to recompute."],
+                "\033[1m",
+            )
+    else:
+        df = None
+
+    if df is None:
+        page_range = get_reference_page_range(args, term)
+        references = extract_references(args.pdf_name, page_range)
+        citations, sources, edit_distances = check_references(
+            references, args.browser, args.captcha_time
+        )
+        df = pd.DataFrame(
+            {
+                "StudentRef": references,
+                "Source": sources,
+                "Citation": citations,
+                "EditDistance": edit_distances,
+            }
+        )
+        df.to_csv(csv_path, index=False)
+        print(f"Results saved to {csv_path}")
+
+    return df
+
 def parse_args() -> argparse.Namespace:
     """
     Parse command-line arguments for the script.
@@ -608,64 +727,32 @@ def parse_args() -> argparse.Namespace:
         default=10,
         help="Time to wait for captcha solving (default: 10 seconds).",
     )
+    parser.add_argument(
+        "--overwrite_csv",
+        action="store_true",
+        help="If set, overwrite the CSV file with the results for this"
+             " thesis if it exists.",
+    )
     return parser.parse_args()
 
-    
+
 def main() -> None:
     """
     Main entry point for the script. Handles argument parsing, reference
     extraction, citation checking, result processing, and optional logging.
-
-    Returns:
-        None
     """
     args = parse_args()
     term = TerminalDisplay()
     log_buffer: Optional[StringIO] = None
-    
+
     orig_stdout = sys.stdout
     if args.log_output:
         log_buffer = StringIO()
         sys.stdout = log_buffer
 
     try:
-        if args.references_page_range is not None:
-            page_range = parse_page_range(args.references_page_range)
-        else:
-            page_range = find_references_section_by_text(args.pdf_name)
-            if page_range is None:
-                print(
-                    "Could not auto-detect the references section in the PDF "
-                    "using outline or text search."
-                )
-                return
-            term.print_boxed_section(
-                "📄 Automatically detected reference pages",
-                [f"{page_range}"],
-                "\033[1m",
-            )
-
-        references = extract_references(args.pdf_name, page_range)
-
-        citations, sources, edit_distances = check_references(
-            references, args.browser, args.captcha_time
-        )
-        no_year, not_found, filtered, flagged = process_references(
-            args, references, citations, sources, edit_distances
-        )
-
-        term.print_summary_tables(no_year, not_found)
-        term.print_flagged_references(flagged, args.max_edit_distance)
-
-        if getattr(args, "print_dataframe", False):
-            term.print_boxed_section(
-                "📋 \033[1mProcessed References Table:\033[0m", [filtered]
-            )
-            pd.set_option("display.max_rows", None)
-            pd.set_option("display.max_columns", None)
-            pd.set_option("display.width", None)
-            pd.set_option("display.colheader_justify", "left")
-            print(filtered)
+        df = load_or_compute_results(args, term)
+        report_results(df, args, term)
     finally:
         save_log_if_needed(args, log_buffer, orig_stdout)
 
