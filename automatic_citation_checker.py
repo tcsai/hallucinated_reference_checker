@@ -32,7 +32,6 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
-from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 from tqdm import tqdm
 
@@ -477,7 +476,7 @@ def check_references(
     citations: List[str] = []
     sources: List[str] = []
     edit_distances: List[int] = []
-    
+
     driver = get_webdriver(browser)
     driver.set_window_size(800, 800)
     for ref in tqdm(references):
@@ -599,7 +598,8 @@ def get_reference_page_range(
     args: argparse.Namespace, term: TerminalDisplay
 ) -> List[int]:
     """
-    Determine the page range for references, either from args or by auto-detect.
+    Determine the page range for references, either from args or by auto-
+    detect.
 
     Args:
         args (argparse.Namespace): Parsed command-line arguments.
@@ -628,6 +628,7 @@ def get_reference_page_range(
         )
         return page_range
 
+
 def load_or_compute_results(
     args: argparse.Namespace, term: TerminalDisplay
 ) -> pd.DataFrame:
@@ -642,7 +643,12 @@ def load_or_compute_results(
     Returns:
         pd.DataFrame: DataFrame with reference checking results.
     """
-    csv_path = os.path.splitext(args.pdf_name)[0] + ".csv"
+    output_dir = os.path.join(os.getcwd(), "output")
+    os.makedirs(output_dir, exist_ok=True)
+    csv_path = os.path.join(
+        output_dir,
+        os.path.splitext(os.path.basename(args.pdf_name))[0] + ".csv",
+    )
     required_cols = {"StudentRef", "Source", "Citation", "EditDistance"}
 
     # Try to load CSV unless overwrite is requested
@@ -681,6 +687,7 @@ def load_or_compute_results(
         print(f"Results saved to {csv_path}")
 
     return df
+
 
 def parse_args() -> argparse.Namespace:
     """
@@ -731,7 +738,7 @@ def parse_args() -> argparse.Namespace:
         "--overwrite_csv",
         action="store_true",
         help="If set, overwrite the CSV file with the results for this"
-             " thesis if it exists.",
+        " thesis if it exists.",
     )
     return parser.parse_args()
 
