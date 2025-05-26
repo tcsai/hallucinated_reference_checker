@@ -1,1 +1,2 @@
-example_thesis_1.csv
+output/*.csv
+theses/*.pdf

@@ -10,7 +10,7 @@ You need the following installed to run the script:
 - **Python 3.8+**
 - **Selenium** (`4.32.0` or higher)
 - **pypdf** (`5.5.0` or higher)
-- A browser (e.g., Firefox, Chrome, or Safari) and its corresponding WebDriver.
+- A browser (e.g., Firefox, Chrome, Safari, Edge, Opera, and (all untested) Brave, Vivaldi, Chromium) and its corresponding WebDriver.
 
 ## 🛠️ How does it work?
 

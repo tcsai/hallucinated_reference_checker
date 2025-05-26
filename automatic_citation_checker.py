@@ -16,6 +16,7 @@ PACKAGES:
 import argparse
 import difflib
 import os
+import platform
 import re
 import shutil
 import string
@@ -450,6 +451,52 @@ def get_webdriver(browser: str):
         return webdriver.Chrome()
     elif browser == "safari":
         return webdriver.Safari()
+    elif browser == "edge":
+        return webdriver.Edge()
+    elif browser == "opera":
+        return webdriver.Opera()
+    elif browser == "brave" or browser == "vivaldi" or browser == "chromium":
+        try:
+            os_name = platform.system().lower()
+            options = webdriver.ChromeOptions()
+            if os_name == "linux":
+                if browser == "brave":
+                    options.binary_location = "/usr/bin/brave"
+                elif browser == "vivaldi":
+                    options.binary_location = "/usr/bin/vivaldi"
+                elif browser == "chromium":
+                    options.binary_location = "/usr/bin/chromium-browser"
+            elif os_name == "darwin":  # macOS
+                if browser == "brave":
+                    options.binary_location = (
+                        "/Applications/Brave Browser.app/Contents/"
+                        "MacOS/Brave Browser"
+                    )
+                elif browser == "vivaldi":
+                    options.binary_location = (
+                        "/Applications/Vivaldi.app/Contents/MacOS/Vivaldi"
+                    )
+                elif browser == "chromium":
+                    options.binary_location = (
+                        "/Applications/Chromium.app/Contents/MacOS/Chromium"
+                    )
+            elif os_name == "windows":  # Windows
+                if browser == "brave":
+                    options.binary_location = (
+                        "C:\\Program Files\\BraveSoftware\\Brave-Browser"
+                        "\\Application\\brave.exe"
+                    )
+                elif browser == "vivaldi":
+                    options.binary_location = (
+                        "C:\\Program Files\\Vivaldi\\Application\\vivaldi.exe"
+                    )
+                elif browser == "chromium":
+                    options.binary_location = (
+                        "C:\\Program Files\\Chromium\\Application\\chrome.exe"
+                    )
+            return webdriver.Chrome(options=options)
+        except Exception:
+            raise ValueError("Seems like this browser option is not working.")
     else:
         raise ValueError(f"Unsupported browser: {browser}")
 
@@ -708,7 +755,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--browser",
         type=str,
-        choices=["firefox", "chrome", "safari"],
+        choices=[
+            "firefox",
+            "chrome",
+            "safari",
+            "edge",
+            "opera",
+            "brave",
+            "vivaldi",
+            "chromium",
+        ],
         default="firefox",
         help="Browser to use for Selenium (default: firefox).",
     )
