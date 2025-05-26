@@ -69,6 +69,11 @@ python [automatic_citation_checker.py](http://_vscodecontentref_/1) <pdf_name> [
    python automatic_citation_checker.py myfile.pdf --captcha_time=20
    ```
 
+6. Tune the edit distance you want to flag titles with if it's exceeded:
+   ```bash
+   python automatic_citation_checker.py myfile.pdf --max_edit_distance=5
+   ```
+
 ## 📊 Output
 
 ### Summary:
