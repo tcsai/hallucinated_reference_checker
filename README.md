@@ -1,21 +1,105 @@
 # hallucinated_reference_checker
-Quick and dirty script for checking if a pdf's references can also be found via Google Scholar, or if they have been hallucinated.
 
-You need selenium (4.32.0 or higher) and pypdf (5.5.0 or higher) to be installed for this, as well as a FireFox browser, though you can also modify the script to work with a different one.
+A script for checking if a PDF's references can also be found via Google Scholar or DBLP, or if they have been hallucinated.
 
-## How does it work?
+The script detects the references section in the PDF, extracts all references, and searches for each citation on DBLP and Google Scholar. It compares the student's reference to the found citation using edit distance and prints an overview of flagged references.
 
-1. Insert the script in a folder with the pdf(s) you want to check.
-2. Add the name of the pdf in question to `pdf_name`
-3. Add the page range where the references are found to `references_page_range`
-4. Run script
+## 📋 Requirements
 
-This will open a FireFox browser for you. Keep an eye out for captchas - you'll have to fill these in yourself to circumvent them, at least for now. The script gets the citation of the top Google Scholar result in APA form, and print it so you can compare the pdf's citation with it. It waits for your input keys to continue to the next citation. 
+You need the following installed to run the script:
+- **Python 3.8+**
+- **Selenium** (`4.32.0` or higher)
+- **pypdf** (`5.5.0` or higher)
+- A browser (e.g., Firefox, Chrome, or Safari) and its corresponding WebDriver.
 
-6. Press ENTER if the citation matches/looks fine
-7. Press N or some other key if something seems suspicious.
+## 🛠️ How does it work?
 
-*The script provides an output table with the original citations, Scholar's top result, and your rating.*
+1. Place the script in a folder with the PDF(s) you want to check.
+2. Run the script with the name of the PDF as an argument.
+3. The script will:
+   - Try to find the references section (should work for our LaTeX templates; if not, use a manually provided page range).
+   - Extract references from the detected section.
+   - Search for each reference on DBLP and Google Scholar.
+   - Compare the extracted reference with the top result using edit distance.
+   - Print flagged references and a summary table.
 
-NOTE: This is really a simplistic solution, but it can be adapted to not need the page numbers to be filled in, or to automatically determine if the citation and the top scholar result are similar enough. For now, I hope it is somewhat helpful, and look forward to tips to improve it.
+## 💻 Usage
 
+Run the script from the command line:
+
+```bash
+python [automatic_citation_checker.py](http://_vscodecontentref_/1) <pdf_name> [options]
+```
+
+### Required Argument:
+- `pdf_name`: Path to the PDF file to check.
+
+### Optional Arguments:
+- `--references_page_range`: Manually specify the page range for the references section (e.g., `23-25`). If not provided, the script will attempt to detect the references section automatically.
+- `--browser`: Specify the browser to use for Selenium (`firefox`, `chrome`, or `safari`). Default is `firefox`.
+- `--max_edit_distance`: Maximum edit distance to consider a reference as matching. Default is `30`.
+- `--log_output`: Save the printed output to a log file.
+- `--print_dataframe`: Print the full processed DataFrame at the end.
+- `--captcha_time`: Time (in seconds) to wait for solving captchas. Default is `10`.
+
+### Example Commands:
+
+1. Automatically detect the references section:
+   ```bash
+   python automatic_citation_checker.py myfile.pdf
+   ```
+
+2. Specify the references page range manually:
+   ```bash
+   python automatic_citation_checker.py myfile.pdf --references_page_range 23-25
+   ```
+
+3. Use Chrome as the browser (default is Firefox):
+   ```bash
+   python automatic_citation_checker.py myfile.pdf --browser chrome
+   ```
+
+4. Save the output to a log file:
+   ```bash
+   python automatic_citation_checker.py myfile.pdf --log_output
+   ```
+
+5. Give yourself more time to solve the captchas:
+   ```bash
+   python automatic_citation_checker.py myfile.pdf --captcha_time=20
+   ```
+
+## 📊 Output
+
+### Summary:
+- **References with no year featured**: References that do not contain a year (e.g., `2020`) are skipped and listed separately.
+- **References not found**: References that could not be found on DBLP or Google Scholar are listed separately.
+- **Flagged references**: References with an edit distance greater than the specified threshold (`--max_edit_distance`) are flagged and displayed in detail.
+
+### Full Table:
+The script prints a full table of processed references, including:
+- `StudentRef`: The original reference from the PDF.
+- `Source`: The source of the citation (`DBLP`, `Scholar`, or `Error`).
+- `Citation`: The citation retrieved from DBLP or Google Scholar.
+- `EditDistance`: The edit distance between the original reference and the retrieved citation.
+
+## 📝Notes
+
+- The script uses **edit distance** to compare references. A lower edit distance indicates a closer match.
+- If a reference does not contain a year, it is skipped, and its edit distance is set to `999998`.
+- If a reference cannot be found on DBLP or Google Scholar, its edit distance is set to `999999`.
+- Keep an eye out for captchas when using Google Scholar (usually at the start only). The script will wait for you to solve them.
+- The script saves the output to a `.csv`; if you're tweaking things, please don't forget to overwrite using the `--overwrite_csv` flag.
+
+## ⚠️ Limitations
+
+- The script relies on Google Scholar and DBLP for citation data. If these services block requests or fail to return results, the script may not work as expected.
+- Automatic detection of the references section assumes the section starts with "References" and ends before "Appendix" (if present). This may not work for all PDFs.
+
+## 🚀 Future Improvements
+
+- Add support for more robust reference detection.
+- Improve handling of captchas.
+- Add support for additional citation databases.
+
+Feel free to contribute or suggest improvements (via [Issues](https://github.com/tcsai/hallucinated_reference_checker/issues))!
