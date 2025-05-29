@@ -618,7 +618,7 @@ def find_references_section_by_text(
         text = reader.pages[i].extract_text() or ""
         first_line = text.strip().split("\n", 1)[0].strip().lower()
         if first_line.startswith("appendix"):
-            end_page = i - 1
+            end_page = i
             break
 
     if end_page is None:
