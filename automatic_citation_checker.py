@@ -498,7 +498,10 @@ def get_webdriver(browser: str):
 
 
 def check_references(
-    references: List[str], browser: str, captcha_time: int
+    references: List[str],
+    browser: str,
+    captcha_time: int,
+    max_edit_distance: int,
 ) -> Tuple[List[str], List[str], List[int]]:
     """
     For each reference, check DBLP first, then Google Scholar if not found.
@@ -508,6 +511,7 @@ def check_references(
         references (List[str]): List of reference strings.
         browser (str): Browser to use for Selenium.
         captcha_time (int): Time to wait for captcha solving.
+        max_edit_distance (int): Maximum allowed edit distance.
 
     Returns:
         Tuple[List[str], List[str], List[int]]:
@@ -532,15 +536,29 @@ def check_references(
         title = extract_apa_title(ref)
         dblp_query = title if title else ref
         dblp_citation = check_dblp(dblp_query)
+        norm_ref = normalize_reference(ref)
+        used_scholar = False
+
         if dblp_citation:
-            citations.append(dblp_citation)
-            sources.append("DBLP")
-            norm_ref = normalize_reference(ref)
             norm_dblp = normalize_reference(dblp_citation)
             dist = edit_distance(norm_ref, norm_dblp)
-            edit_distances.append(dist)
+            # If DBLP edit distance is too high, try Scholar
+            if dist > max_edit_distance:
+                scholar_cite, scholar_source, scholar_dist = (
+                    get_citation_from_scholar(driver, ref, captcha_time)
+                )
+                if scholar_dist < dist:
+                    citations.append(scholar_cite)
+                    sources.append(scholar_source)
+                    edit_distances.append(scholar_dist)
+                    used_scholar = True
+            if not used_scholar:
+                citations.append(dblp_citation)
+                sources.append("DBLP")
+                edit_distances.append(dist)
             continue
 
+        # If no DBLP citation, fallback to Scholar
         scholar_cite, scholar_source, scholar_dist = get_citation_from_scholar(
             driver, ref, captcha_time
         )
@@ -739,7 +757,7 @@ def load_or_compute_results(
         page_range = get_reference_page_range(args, term)
         references = extract_references(args.pdf_name, page_range)
         citations, sources, edit_distances = check_references(
-            references, args.browser, args.captcha_time
+            references, args.browser, args.captcha_time, args.max_edit_distance
         )
         df = pd.DataFrame(
             {
