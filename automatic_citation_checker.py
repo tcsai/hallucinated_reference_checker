@@ -1,8 +1,4 @@
-# -*- coding: utf-8 -*-
-"""
-README:
-
-This script checks the references of a student paper for hallucinated
+"""This script checks the references of a student paper for hallucinated
 examples. It detects the references section, extracts all references from
 the PDF, and searches for each citation on DBLP and Google Scholar. It
 compares the student's reference to the found citation using edit distance,
@@ -676,6 +672,26 @@ def get_reference_page_range(
         return page_range
 
 
+def recompute_edit_distances(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Recompute the edit distances between StudentRef and Citation columns.
+
+    Args:
+        df (pd.DataFrame): DataFrame with 'StudentRef' and 'Citation' columns.
+
+    Returns:
+        pd.DataFrame: DataFrame with updated 'EditDistance' column.
+    """
+    # TODO: might want to store original edit distance somewhere to skip
+    # recomputing if it already exists
+    df = df.copy()
+    df["EditDistance"] = [
+        edit_distance(str(ref), str(cite))
+        for ref, cite in zip(df["StudentRef"], df["Citation"])
+    ]
+    return df
+
+
 def load_or_compute_results(
     args: argparse.Namespace, term: TerminalDisplay
 ) -> pd.DataFrame:
@@ -708,6 +724,9 @@ def load_or_compute_results(
             )
             df = None
         else:
+            # Recompute edit distances in case code/logic has changed
+            df = recompute_edit_distances(df)
+            df.to_csv(csv_path, index=False)
             term.print_boxed_section(
                 "📦 Loaded cached results",
                 [f"{csv_path} exists; invoke --overwrite_csv to recompute."],
