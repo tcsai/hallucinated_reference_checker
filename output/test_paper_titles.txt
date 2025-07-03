@@ -1,9 +1,0 @@
-Extracted Titles from Reference Check
-========================================
-
- 1. A comprehensive study of machine learning algorithms
- 2. Deep learning approaches for natural language processing
- 3. Transformers and attention mechanisms
-
-Total titles: 3
-Source PDF: test_paper.pdf
