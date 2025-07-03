@@ -41,6 +41,7 @@ python [automatic_citation_checker.py](http://_vscodecontentref_/1) <pdf_name> [
 - `--log_output`: Save the printed output to a log file.
 - `--print_dataframe`: Print the full processed DataFrame at the end.
 - `--captcha_time`: Time (in seconds) to wait for solving captchas. Default is `10`.
+- `--export_titles`: Export a simple list of extracted titles to console and file for easy copying.
 
 ### Example Commands:
 
@@ -74,6 +75,11 @@ python [automatic_citation_checker.py](http://_vscodecontentref_/1) <pdf_name> [
    python automatic_citation_checker.py myfile.pdf --max_edit_distance=5
    ```
 
+7. Export a copy-friendly list of extracted titles:
+   ```bash
+   python automatic_citation_checker.py myfile.pdf --export_titles
+   ```
+
 ## 📊 Output
 
 ### Summary:
@@ -87,6 +93,12 @@ The script prints a full table of processed references, including:
 - `Source`: The source of the citation (`DBLP`, `Scholar`, or `Error`).
 - `Citation`: The citation retrieved from DBLP or Google Scholar.
 - `EditDistance`: The edit distance between the original reference and the retrieved citation.
+
+### Copy-Friendly Titles:
+When using the `--export_titles` flag, the script additionally provides:
+- A simple, numbered list of extracted titles printed to the console for easy copying
+- A text file (`<pdf_name>_titles.txt`) saved in the `output/` directory containing the same list
+- Clean title extraction that removes formatting and focuses on readability
 
 ## 📝Notes
 

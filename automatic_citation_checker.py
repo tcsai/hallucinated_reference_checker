@@ -216,6 +216,10 @@ def report_results(
         pd.set_option("display.colheader_justify", "left")
         print(filtered)
 
+    # Export copy-friendly titles if requested
+    if getattr(args, "export_titles", False):
+        export_copy_friendly_titles(df, args)
+
 
 def save_log_if_needed(
     args: argparse.Namespace, log_buffer: Optional[StringIO], orig_stdout
@@ -299,6 +303,112 @@ def extract_apa_title(reference: str) -> Optional[str]:
     if match:
         query += " " + match.group(1).strip()
     return query
+
+
+def extract_title_only(reference: str) -> Optional[str]:
+    """
+    Extract just the title from an APA-style reference string for copy-friendly output.
+
+    Args:
+        reference (str): APA-style reference string.
+
+    Returns:
+        Optional[str]: Extracted title string, or None if not found.
+    """
+    # Look for title after year in parentheses
+    match = re.search(r"\(\d{4}\)\.\s*(.+?)\.(?:\s|$)", reference)
+    if match:
+        title = match.group(1).strip()
+        # Clean up common formatting issues
+        title = re.sub(r'\s+', ' ', title)  # Replace multiple spaces with single space
+        # Remove quotes if the entire title is quoted
+        if title.startswith('"') and title.endswith('"'):
+            title = title[1:-1]
+        return title
+    
+    # Fallback: try to extract from different patterns
+    # Sometimes titles are in quotes
+    match = re.search(r'"([^"]+)"', reference)
+    if match:
+        return match.group(1).strip()
+    
+    # Another pattern: title after author and year but before venue
+    match = re.search(r'\(\d{4}\)[^.]*\.\s*([^.]+)\.\s*(?:In\s|Proceedings|Journal|IEEE|ACM)', reference)
+    if match:
+        title = match.group(1).strip()
+        title = re.sub(r'\s+', ' ', title)
+        return title
+    
+    # Pattern for titles without periods after year
+    match = re.search(r'\(\d{4}\)\s+([^.]+?)(?:\.\s*(?:In|Proceedings|Journal|IEEE|ACM|arXiv)|$)', reference)
+    if match:
+        title = match.group(1).strip()
+        title = re.sub(r'\s+', ' ', title)
+        return title
+    
+    return None
+
+
+def export_copy_friendly_titles(
+    df: pd.DataFrame, args: argparse.Namespace
+) -> None:
+    """
+    Export a simple, copy-friendly list of extracted titles to console and file.
+
+    Args:
+        df (pd.DataFrame): DataFrame with reference checking results.
+        args (argparse.Namespace): Parsed command-line arguments.
+    """
+    # Filter out error entries
+    valid_refs = df[
+        (df["EditDistance"] != 999999) & (df["EditDistance"] != 999998)
+    ]
+    
+    titles = []
+    print("\n📋 \033[1mExtracted Titles (Copy-Friendly Format):\033[0m")
+    print("=" * 60)
+    
+    for i, (_, row) in enumerate(valid_refs.iterrows(), 1):
+        # Try to extract title from student reference first
+        student_title = extract_title_only(row['StudentRef'])
+        
+        # If we have a found citation, try to extract title from that too
+        citation_title = None
+        if row['Source'] in ['DBLP', 'Scholar'] and pd.notna(row['Citation']) and row['Citation'] != 'Not Found':
+            citation_title = extract_title_only(row['Citation'])
+        
+        # Use the citation title if available and different, otherwise use student title
+        final_title = citation_title if citation_title else student_title
+        
+        if final_title:
+            titles.append(final_title)
+            print(f"{i:2d}. {final_title}")
+        else:
+            # Fallback: show first part of reference if no title found
+            ref_preview = row['StudentRef'][:80] + "..." if len(row['StudentRef']) > 80 else row['StudentRef']
+            titles.append(ref_preview)
+            print(f"{i:2d}. [Title not extracted] {ref_preview}")
+    
+    print("=" * 60)
+    print(f"Total titles extracted: {len(titles)}")
+    
+    # Save to file
+    output_dir = os.path.join(os.getcwd(), "output")
+    os.makedirs(output_dir, exist_ok=True)
+    titles_file = os.path.join(
+        output_dir,
+        os.path.splitext(os.path.basename(args.pdf_name))[0] + "_titles.txt",
+    )
+    
+    with open(titles_file, "w", encoding="utf-8") as f:
+        f.write("Extracted Titles from Reference Check\n")
+        f.write("=" * 40 + "\n\n")
+        for i, title in enumerate(titles, 1):
+            f.write(f"{i:2d}. {title}\n")
+        f.write(f"\nTotal titles: {len(titles)}\n")
+        f.write(f"Source PDF: {args.pdf_name}\n")
+    
+    print(f"\n📁 Titles also saved to: {titles_file}")
 
 
 def edit_distance(a: str, b: str) -> int:
@@ -832,6 +942,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="If set, overwrite the CSV file with the results for this"
         " thesis if it exists.",
+    )
+    parser.add_argument(
+        "--export_titles",
+        action="store_true",
+        help="If set, export a simple list of extracted titles to console and file for easy copying.",
     )
     return parser.parse_args()
 
