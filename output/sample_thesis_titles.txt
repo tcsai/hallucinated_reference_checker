@@ -1,0 +1,11 @@
+Extracted Titles from Reference Check
+========================================
+
+ 1. Machine learning fundamentals: A comprehensive guide
+ 2. Deep neural networks for computer vision
+ 3. Reinforcement learning algorithms in robotics
+ 4. Natural language processing with transformers
+ 5. Graph neural networks: Theory and applications
+
+Total titles: 5
+Source PDF: sample_thesis.pdf
