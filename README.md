@@ -2,7 +2,7 @@
 
 A script for checking if a PDF's references can also be found via Google Scholar or DBLP, or if they have been hallucinated.
 
-The script detects the references section in the PDF, extracts all references, and searches for each citation on DBLP and Google Scholar. It compares the student's reference to the found citation using edit distance and prints an overview of flagged references.
+The script detects the references section in the PDF, extracts all references, and searches for each citation on DBLP and Google Scholar via DOI, DBLP API, or Selenium-based browser automation. It compares the student's reference title to the found citation title using edit distance and prints an overview of flagged references.
 
 ## 📋 Requirements
 
@@ -10,17 +10,21 @@ You need the following installed to run the script:
 - **Python 3.8+**
 - **Selenium** (`4.32.0` or higher)
 - **pypdf** (`5.5.0` or higher)
-- A browser (e.g., Firefox, Chrome, Safari, Edge, Opera, and (all untested) Brave, Vivaldi, Chromium) and its corresponding WebDriver.
+- **pandas** and **requests**
+- A browser (Firefox, Chrome, Safari, Edge, Opera, Brave, Vivaldi, or Chromium) and its corresponding WebDriver.
 
 ## 🛠️ How does it work?
 
 1. Place the script in a folder with the PDF(s) you want to check.
 2. Run the script with the name of the PDF as an argument.
 3. The script will:
-   - Try to find the references section (should work for our LaTeX templates; if not, use a manually provided page range).
+   - Automatically detect the references section (optimized for LaTeX-generated PDFs; use `--references_page_range` if detection fails).
    - Extract references from the detected section.
-   - Search for each reference on DBLP and Google Scholar.
-   - Compare the extracted reference with the top result using edit distance.
+   - For each reference:
+     - Check if a valid DOI is present (using Selenium to validate).
+     - Search DBLP API if no DOI found.
+     - Fall back to Google Scholar (via Selenium) if DBLP match is poor or not found.
+   - Compare extracted reference titles with found citation titles using edit distance.
    - Print flagged references and a summary table.
 
 ## 💻 Usage
@@ -28,19 +32,20 @@ You need the following installed to run the script:
 Run the script from the command line:
 
 ```bash
-python [automatic_citation_checker.py](http://_vscodecontentref_/1) <pdf_name> [options]
+python automatic_citation_checker.py <pdf_name> [options]
 ```
 
 ### Required Argument:
 - `pdf_name`: Path to the PDF file to check.
 
 ### Optional Arguments:
-- `--references_page_range`: Manually specify the page range for the references section (e.g., `23-25`). If not provided, the script will attempt to detect the references section automatically.
-- `--browser`: Specify the browser to use for Selenium (`firefox`, `chrome`, or `safari`). Default is `firefox`.
-- `--max_edit_distance`: Maximum edit distance to consider a reference as matching. Default is `30`.
-- `--log_output`: Save the printed output to a log file.
-- `--print_dataframe`: Print the full processed DataFrame at the end.
-- `--captcha_time`: Time (in seconds) to wait for solving captchas. Default is `10`.
+- `--references_page_range`: Manually specify the page range for the references section (e.g., `23-25`). If not provided, the script will attempt to auto-detect using the PDF structure.
+- `--browser`: Specify the browser to use for Selenium (`firefox`, `chrome`, `safari`, `edge`, `opera`, `brave`, `vivaldi`, or `chromium`). Default is `firefox`.
+- `--max_edit_distance`: Maximum edit distance threshold to flag a reference (default: `30`).
+- `--log_output`: If set, save the printed output to a log file.
+- `--print_dataframe`: If set, print the full processed DataFrame at the end.
+- `--captcha_time`: Time (in seconds) to wait for solving captchas on Google Scholar (default: `60`).
+- `--overwrite_csv`: If set, overwrite the cached CSV file and recompute all results.
 
 ### Example Commands:
 
@@ -64,42 +69,50 @@ python [automatic_citation_checker.py](http://_vscodecontentref_/1) <pdf_name> [
    python automatic_citation_checker.py myfile.pdf --log_output
    ```
 
-5. Give yourself more time to solve the captchas:
+5. Give yourself more time to solve captchas:
    ```bash
-   python automatic_citation_checker.py myfile.pdf --captcha_time=20
+   python automatic_citation_checker.py myfile.pdf --captcha_time 120
    ```
 
-6. Tune the edit distance you want to flag titles with if it's exceeded:
+6. Tune the edit distance threshold for flagging references:
    ```bash
-   python automatic_citation_checker.py myfile.pdf --max_edit_distance=5
+   python automatic_citation_checker.py myfile.pdf --max_edit_distance 15
+   ```
+
+7. Recompute results and overwrite cached CSV:
+   ```bash
+   python automatic_citation_checker.py myfile.pdf --overwrite_csv
    ```
 
 ## 📊 Output
 
 ### Summary:
-- **References with no year featured**: References that do not contain a year (e.g., `2020`) are skipped and listed separately.
-- **References not found**: References that could not be found on DBLP or Google Scholar are listed separately.
+- **References with no year featured**: References that do not contain a year (e.g., `2020`) are skipped and listed separately with edit distance `999998`.
+- **References not found**: References that could not be found on DBLP or Google Scholar are listed separately with edit distance `999999`.
 - **Flagged references**: References with an edit distance greater than the specified threshold (`--max_edit_distance`) are flagged and displayed in detail.
 
 ### Full Table:
 The script prints a full table of processed references, including:
 - `StudentRef`: The original reference from the PDF.
-- `Source`: The source of the citation (`DBLP`, `Scholar`, or `Error`).
-- `Citation`: The citation retrieved from DBLP or Google Scholar.
-- `EditDistance`: The edit distance between the original reference and the retrieved citation.
+- `Source`: The source of the citation (`DOI`, `DBLP`, `Scholar`, or `Error`).
+- `Citation`: The citation retrieved from DOI validation, DBLP, or Google Scholar.
+- `EditDistance`: The edit distance between the student reference title and the retrieved citation title.
 
-## 📝Notes
+## 📝 Notes
 
-- The script uses **edit distance** to compare references. A lower edit distance indicates a closer match.
-- If a reference does not contain a year, it is skipped, and its edit distance is set to `999998`.
-- If a reference cannot be found on DBLP or Google Scholar, its edit distance is set to `999999`.
+- The script uses **edit distance** to compare reference titles (extracted from the APA format `(YYYY). TITLE.`). A lower edit distance indicates a closer match.
+- If a reference does not contain a year, it is skipped with edit distance `999998`.
+- If a reference cannot be found on DBLP or Google Scholar, it is marked with edit distance `999999`.
+- References with valid DOIs are considered perfect matches (edit distance `0`).
 - Keep an eye out for captchas when using Google Scholar (usually at the start only). The script will wait for you to solve them.
-- The script saves the output to a `.csv`; if you're tweaking things, please don't forget to overwrite using the `--overwrite_csv` flag.
+- The script caches results in a `.csv` file in the `output/` directory. Use `--overwrite_csv` to force recomputation.
 
 ## ⚠️ Limitations
 
 - The script relies on Google Scholar and DBLP for citation data. If these services block requests or fail to return results, the script may not work as expected.
-- Automatic detection of the references section assumes the section starts with "References" and ends before "Appendix" (if present). This may not work for all PDFs.
+- Automatic detection of the references section assumes the section starts with "References" and ends before "Appendix" (if present). This works well for LaTeX-generated PDFs but may not work for all document types.
+- DOI validation is performed via Selenium navigation; some DOI services may block automated requests.
+- Title extraction assumes APA citation format with the pattern `(YYYY). TITLE.`; references not in this format may not extract titles correctly.
 
 ## 🚀 Future Improvements
 
