@@ -870,8 +870,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--captcha_time",
         type=int,
-        default=10,
-        help="Time to wait for captcha solving (default: 10 seconds).",
+        default=60,
+        help="Time to wait for captcha solving (default: 60 seconds).",
     )
     parser.add_argument(
         "--overwrite_csv",
