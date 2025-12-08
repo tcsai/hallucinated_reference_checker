@@ -180,11 +180,15 @@ class TerminalDisplay(object):
             )
 
     def print_flagged_copyable_list(self, flagged: pd.DataFrame) -> None:
-        """
-        Print a copyable list of flagged references with student titles and URLs.
+        """Print a copyable list of flagged references with titles and URLs.
+
+        Extracts titles from APA-formatted references and searches for any URLs
+        (DOIs, arXiv links, etc.) in the reference string. Outputs as a simple
+        numbered list without box formatting for easy selection and copying.
 
         Args:
-            flagged (pd.DataFrame): DataFrame of flagged references.
+            flagged (pd.DataFrame): DataFrame of flagged references with
+                                   StudentRef column containing APA citations.
         """
         if flagged.empty:
             return
@@ -193,15 +197,12 @@ class TerminalDisplay(object):
         for idx, (_, row) in enumerate(flagged.iterrows(), 1):
             student_ref = row["StudentRef"]
 
-            # Extract title from student reference
             title_match = re.search(r"\(\d{4}\)\.\s*(.+?)\.", student_ref)
             title = title_match.group(1).strip() if title_match else student_ref
 
-            # Try to extract any URL from student reference
             url_match = re.search(r"https?://\S+", student_ref)
             url = url_match.group(0) if url_match else None
 
-            # Format the line
             line = f"{idx}. {title}"
             if url:
                 line += f" | {url}"
@@ -261,22 +262,25 @@ def save_log_if_needed(
 
 
 def extract_and_validate_doi(driver, reference: str) -> Optional[str]:
-    """
-    Extract and validate a DOI from a reference using Selenium webdriver.
+    """Extract and validate a DOI from a reference using Selenium.
+
+    Searches for a DOI URL pattern in the reference string and attempts to
+    navigate to it using the provided webdriver to verify accessibility.
+    Cleans trailing punctuation from the DOI before validation.
 
     Args:
         driver: Selenium WebDriver instance (or None if not initialized).
         reference (str): Reference string to check for DOI.
 
     Returns:
-        Optional[str]: Valid DOI URL if found and accessible, else None.
+        Optional[str]: Valid DOI URL (https://doi.org/...) if found and
+                      accessible, else None.
     """
     reference = re.sub(r"\s+", "", reference)
     match = re.search(r"https?://(?:dx\.)?doi\.org/(10\.\S+)", reference, re.IGNORECASE)
 
     if match:
         doi = match.group(1)
-        # Clean trailing punctuation
         doi = re.sub(r"[,\.\)]+$", "", doi)
         doi_url = f"https://doi.org/{doi}"
 
@@ -285,7 +289,6 @@ def extract_and_validate_doi(driver, reference: str) -> Optional[str]:
 
         try:
             driver.get(doi_url)
-            # If we reach here without error, DOI is valid
             return doi_url
         except Exception:
             return None
@@ -355,20 +358,24 @@ def extract_apa_title(reference: str) -> Optional[str]:
 
 
 def edit_distance(a: str, b: str) -> int:
-    """
-    Compute edit distance between two strings using SequenceMatcher.
+    """Compute edit distance between two reference titles using SequenceMatcher.
+
+    Extracts titles from APA-formatted references and compares them. Returns 0
+    if both titles are missing. Returns the length of the non-empty title if
+    only one title is missing. Otherwise computes the similarity ratio and
+    converts to an edit distance metric.
 
     Args:
-        a (str): First string.
-        b (str): Second string.
+        a (str): First reference string (typically student reference).
+        b (str): Second reference string (typically found citation).
 
     Returns:
-        int: Edit distance between the two strings.
+        int: Edit distance based on title comparison. Lower values indicate
+             closer matches.
     """
     title_a = extract_apa_title(a) or ""
     title_b = extract_apa_title(b) or ""
     
-    # If both titles are empty, return a high edit distance
     if not title_a and not title_b:
         return 0
     if not title_a or not title_b:
@@ -563,28 +570,32 @@ def check_references(
     captcha_time: int,
     max_edit_distance: int,
 ) -> Tuple[List[str], List[str], List[int]]:
-    """
-    For each reference, check DOI first, then DBLP, then Google Scholar.
-    Returns lists of citations, their sources, and edit distances.
+    """Check references against DOI, DBLP, and Google Scholar in that order.
+
+    For each reference, the function:
+    1. Validates that a year (4-digit) is present, skips if missing.
+    2. Initializes browser on first use (lazy initialization).
+    3. Checks for a valid DOI and accepts it as a perfect match (distance 0).
+    4. Falls back to DBLP API search if no DOI found.
+    5. Falls back to Google Scholar search if DBLP distance exceeds threshold.
+    6. Returns all found citations with their sources and edit distances.
 
     Args:
-        references (List[str]): List of reference strings.
+        references (List[str]): List of reference strings to check.
         browser (str): Browser to use for Selenium.
-        captcha_time (int): Time to wait for captcha solving.
-        max_edit_distance (int): Maximum allowed edit distance.
+        captcha_time (int): Seconds to wait for captcha solving on Scholar.
+        max_edit_distance (int): Distance threshold for Scholar fallback.
 
     Returns:
-        Tuple[List[str], List[str], List[int]]:
-            citations (List[str]): Citations found or error messages.
-            sources (List[str]): Source of each citation ("DOI", "DBLP",
-                "Scholar", or "Error").
-            edit_distances (List[int]): Edit distances for each reference.
+        Tuple[List[str], List[str], List[int]]: Three lists with citations,
+            sources ("DOI", "DBLP", "Scholar", "Error"), and edit distances
+            (999998=no year, 999999=not found).
     """
     citations: List[str] = []
     sources: List[str] = []
     edit_distances: List[int] = []
 
-    driver = None  # Initialize driver lazily
+    driver = None
     has_doi_to_check = any(re.search(r"https?://(?:dx\.)?doi\.org", ref, re.IGNORECASE) for ref in references)
 
     for ref in tqdm(references):
@@ -594,21 +605,18 @@ def check_references(
             edit_distances.append(999998)
             continue
 
-        # Initialize driver on first use if needed
-        if driver is None and (has_doi_to_check or True):  # Always need driver for Scholar
+        if driver is None and (has_doi_to_check or True):
             driver = get_webdriver(browser)
             driver.set_window_size(800, 800)
 
-        # First, check if DOI exists and is valid
         doi_url = extract_and_validate_doi(driver, ref)
 
         if doi_url:
-            citations.append(ref)  # Use original reference
+            citations.append(ref)
             sources.append("DOI")
-            edit_distances.append(0)  # Perfect match since DOI is valid
+            edit_distances.append(0)
             continue
 
-        # If no valid DOI, proceed with DBLP/Scholar pipeline
         title = extract_apa_title(ref)
         dblp_query = title if title else ref
         dblp_citation = check_dblp(dblp_query)
@@ -618,7 +626,6 @@ def check_references(
         if dblp_citation:
             norm_dblp = normalize_reference(dblp_citation)
             dist = edit_distance(norm_ref, norm_dblp)
-            # If DBLP edit distance is too high, try Scholar
             if dist > max_edit_distance:
                 scholar_cite, scholar_source, scholar_dist = get_citation_from_scholar(
                     driver, ref, captcha_time
@@ -634,7 +641,6 @@ def check_references(
                 edit_distances.append(dist)
             continue
 
-        # If no DBLP citation, fallback to Scholar
         scholar_cite, scholar_source, scholar_dist = get_citation_from_scholar(
             driver, ref, captcha_time
         )
@@ -642,7 +648,6 @@ def check_references(
         sources.append(scholar_source)
         edit_distances.append(scholar_dist)
 
-    # Close the driver only if it was opened
     if driver is not None:
         driver.close()
 
