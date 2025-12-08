@@ -357,19 +357,20 @@ def get_citation_from_scholar(
         try:
             WebDriverWait(driver, 1).until(
                 lambda d: d.find_elements(By.CLASS_NAME, "gs_or_cit")
-                or d.find_elements(By.ID, "gs_captcha_ccl")
+                or d.find_elements(By.ID, "captcha-form")
+                or d.find_elements(By.ID, "rc-anchor-container")
             )
         except TimeoutException:
             return "Not Found", "Error", 999999
 
         try:
-            if driver.find_element(By.ID, "gs_captcha_ccl"):
+            if driver.find_element(By.ID, "captcha-form") or driver.find_element(
+                By.ID, "rc-anchor-container"
+            ):
                 WebDriverWait(driver, captcha_time).until(
                     lambda d: d.find_elements(By.CLASS_NAME, "gs_or_cit")
                 )
-                citation_button = driver.find_element(
-                    By.CLASS_NAME, "gs_or_cit"
-                )
+                citation_button = driver.find_element(By.CLASS_NAME, "gs_or_cit")
                 citation_button.click()
         except NoSuchElementException:
             citation_button = driver.find_element(By.CLASS_NAME, "gs_or_cit")
