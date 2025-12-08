@@ -538,8 +538,7 @@ def check_references(
     sources: List[str] = []
     edit_distances: List[int] = []
 
-    driver = get_webdriver(browser)
-    driver.set_window_size(800, 800)
+    driver = None  # Initialize driver lazily
 
     for ref in tqdm(references):
         if not re.search(r"\b\d{4}\b", ref):
@@ -569,6 +568,10 @@ def check_references(
             dist = edit_distance(norm_ref, norm_dblp)
             # If DBLP edit distance is too high, try Scholar
             if dist > max_edit_distance:
+                # Initialize driver on first Scholar search
+                if driver is None:
+                    driver = get_webdriver(browser)
+                    driver.set_window_size(800, 800)
                 scholar_cite, scholar_source, scholar_dist = get_citation_from_scholar(
                     driver, ref, captcha_time
                 )
@@ -584,6 +587,10 @@ def check_references(
             continue
 
         # If no DBLP citation, fallback to Scholar
+        # Initialize driver on first Scholar search
+        if driver is None:
+            driver = get_webdriver(browser)
+            driver.set_window_size(800, 800)
         scholar_cite, scholar_source, scholar_dist = get_citation_from_scholar(
             driver, ref, captcha_time
         )
@@ -591,7 +598,10 @@ def check_references(
         sources.append(scholar_source)
         edit_distances.append(scholar_dist)
 
-    driver.close()
+    # Close the driver only if it was opened
+    if driver is not None:
+        driver.close()
+
     return citations, sources, edit_distances
 
 
