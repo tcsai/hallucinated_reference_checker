@@ -231,7 +231,17 @@ def save_log_if_needed(
         print(f"\n📝 Log saved to {log_filename}")
 
 
-def extract_and_validate_doi(reference: str) -> Optional[str]:
+def extract_and_validate_doi(driver, reference: str) -> Optional[str]:
+    """
+    Extract and validate a DOI from a reference using Selenium webdriver.
+
+    Args:
+        driver: Selenium WebDriver instance (or None if not initialized).
+        reference (str): Reference string to check for DOI.
+
+    Returns:
+        Optional[str]: Valid DOI URL if found and accessible, else None.
+    """
     reference = re.sub(r"\s+", "", reference)
     match = re.search(r"https?://(?:dx\.)?doi\.org/(10\.\S+)", reference, re.IGNORECASE)
 
@@ -241,13 +251,13 @@ def extract_and_validate_doi(reference: str) -> Optional[str]:
         doi = re.sub(r"[,\.\)]+$", "", doi)
         doi_url = f"https://doi.org/{doi}"
 
-        try:
-            # open doi using selenium webdriver
-            resp = requests.head(doi_url, allow_redirects=True, timeout=10)
-            resp.raise_for_status()
-            return doi_url
-        except requests.RequestException:
+        if driver is None:
             return None
+
+        try:
+            driver.get(doi_url)
+            # If we reach here without error, DOI is valid
+            return doi_url
         except Exception:
             return None
 
@@ -299,22 +309,20 @@ def process_references(
 
 def extract_apa_title(reference: str) -> Optional[str]:
     """
-    Extract the first author and title from an APA-style reference string.
+    Extract the title from an APA-style reference string.
+    
+    Assumes the format: "Author(s) (YYYY). TITLE HERE. Rest..."
 
     Args:
         reference (str): APA-style reference string.
 
     Returns:
-        Optional[str]: Extracted author and title string, or None if not found.
+        Optional[str]: Extracted title string, or None if not found.
     """
-    query: str = ""
-    match = re.search(r"^(.+?)\s*\(\d{4}\)", reference)
+    match = re.search(r"\(\d{4}\)\.\s*(.+?)\.", reference)
     if match:
-        query += match.group(1).strip()
-    match = re.search(r"\(\d{4}\)\.\s*(.+?)\.\s", reference)
-    if match:
-        query += " " + match.group(1).strip()
-    return query
+        return match.group(1).strip()
+    return None
 
 
 def edit_distance(a: str, b: str) -> int:
@@ -328,8 +336,17 @@ def edit_distance(a: str, b: str) -> int:
     Returns:
         int: Edit distance between the two strings.
     """
-    sm = difflib.SequenceMatcher(None, extract_apa_title(a), extract_apa_title(b))
-    return int(max(len(a), len(b)) * (1 - sm.ratio()))
+    title_a = extract_apa_title(a) or ""
+    title_b = extract_apa_title(b) or ""
+    
+    # If both titles are empty, return a high edit distance
+    if not title_a and not title_b:
+        return 0
+    if not title_a or not title_b:
+        return max(len(title_a), len(title_b))
+    
+    sm = difflib.SequenceMatcher(None, title_a, title_b)
+    return int(max(len(title_a), len(title_b)) * (1 - sm.ratio()))
 
 
 def normalize_reference(ref: str) -> str:
@@ -539,6 +556,7 @@ def check_references(
     edit_distances: List[int] = []
 
     driver = None  # Initialize driver lazily
+    has_doi_to_check = any(re.search(r"https?://(?:dx\.)?doi\.org", ref, re.IGNORECASE) for ref in references)
 
     for ref in tqdm(references):
         if not re.search(r"\b\d{4}\b", ref):
@@ -547,8 +565,13 @@ def check_references(
             edit_distances.append(999998)
             continue
 
+        # Initialize driver on first use if needed
+        if driver is None and (has_doi_to_check or True):  # Always need driver for Scholar
+            driver = get_webdriver(browser)
+            driver.set_window_size(800, 800)
+
         # First, check if DOI exists and is valid
-        doi_url = extract_and_validate_doi(ref)
+        doi_url = extract_and_validate_doi(driver, ref)
 
         if doi_url:
             citations.append(ref)  # Use original reference
@@ -568,10 +591,6 @@ def check_references(
             dist = edit_distance(norm_ref, norm_dblp)
             # If DBLP edit distance is too high, try Scholar
             if dist > max_edit_distance:
-                # Initialize driver on first Scholar search
-                if driver is None:
-                    driver = get_webdriver(browser)
-                    driver.set_window_size(800, 800)
                 scholar_cite, scholar_source, scholar_dist = get_citation_from_scholar(
                     driver, ref, captcha_time
                 )
@@ -587,10 +606,6 @@ def check_references(
             continue
 
         # If no DBLP citation, fallback to Scholar
-        # Initialize driver on first Scholar search
-        if driver is None:
-            driver = get_webdriver(browser)
-            driver.set_window_size(800, 800)
         scholar_cite, scholar_source, scholar_dist = get_citation_from_scholar(
             driver, ref, captcha_time
         )
