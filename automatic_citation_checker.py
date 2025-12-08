@@ -179,6 +179,34 @@ class TerminalDisplay(object):
                 "\033[1m",
             )
 
+    def print_flagged_copyable_list(self, flagged: pd.DataFrame) -> None:
+        """
+        Print a copyable list of flagged references with student titles and URLs.
+
+        Args:
+            flagged (pd.DataFrame): DataFrame of flagged references.
+        """
+        if flagged.empty:
+            return
+
+        print("\n📋 Flagged References (Copyable List):\n")
+        for idx, (_, row) in enumerate(flagged.iterrows(), 1):
+            student_ref = row["StudentRef"]
+
+            # Extract title from student reference
+            title_match = re.search(r"\(\d{4}\)\.\s*(.+?)\.", student_ref)
+            title = title_match.group(1).strip() if title_match else student_ref
+
+            # Try to extract any URL from student reference
+            url_match = re.search(r"https?://\S+", student_ref)
+            url = url_match.group(0) if url_match else None
+
+            # Format the line
+            line = f"{idx}. {title}"
+            if url:
+                line += f" | {url}"
+            print(line)
+
 
 def report_results(
     df: pd.DataFrame, args: argparse.Namespace, term: TerminalDisplay
@@ -200,6 +228,7 @@ def report_results(
 
     term.print_summary_tables(no_year, not_found)
     term.print_flagged_references(flagged, args.max_edit_distance)
+    term.print_flagged_copyable_list(flagged)
 
     if getattr(args, "print_dataframe", False):
         term.print_boxed_section(
