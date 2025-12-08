@@ -34,7 +34,6 @@ from tqdm import tqdm
 
 
 class TerminalDisplay(object):
-
     def __init__(self):
         """
         This class provides methods for terminal output formatting and
@@ -73,9 +72,7 @@ class TerminalDisplay(object):
         Returns:
             List[str]: List of wrapped lines.
         """
-        return wrap(
-            text, width=width, break_long_words=False, break_on_hyphens=False
-        )
+        return wrap(text, width=width, break_long_words=False, break_on_hyphens=False)
 
     def strip_ansi(self, text: str) -> str:
         """
@@ -146,9 +143,7 @@ class TerminalDisplay(object):
                 "🔍 References not found on DBLP or Scholar", lines, "\033[1m"
             )
 
-    def print_flagged_references(
-        self, flagged: pd.DataFrame, threshold: int
-    ) -> None:
+    def print_flagged_references(self, flagged: pd.DataFrame, threshold: int) -> None:
         """
         Print references whose edit distance exceeds the threshold.
 
@@ -173,14 +168,14 @@ class TerminalDisplay(object):
                     f"    {row['EditDistance']}",
                 ]
                 self.print_boxed_section(
-                    f"🚩 Reference flagged (edit distance > {threshold})",
+                    f"🚩 References flagged (edit distance > {threshold})",
                     lines,
                     "\033[1m",
                 )
         else:
             self.print_boxed_section(
-                "✅ All clear!",
-                ["No references flagged for exceeding set edit distance."],
+                "🚩 References flagged (edit distance > {threshold})",
+                ["All clear! No references flagged for exceeding set edit distance."],
                 "\033[1m",
             )
 
@@ -234,6 +229,27 @@ def save_log_if_needed(
         with open(log_filename, "w", encoding="utf-8") as f:
             f.write(log_buffer.getvalue())
         print(f"\n📝 Log saved to {log_filename}")
+
+
+def extract_and_validate_doi(reference: str) -> Optional[str]:
+    reference = re.sub(r"\s+", "", reference)
+    match = re.search(r"https?://(?:dx\.)?doi\.org/(10\.\S+)", reference, re.IGNORECASE)
+
+    if match:
+        doi = match.group(1)
+        # Clean trailing punctuation
+        doi = re.sub(r"[,\.\)]+$", "", doi)
+        doi_url = f"https://doi.org/{doi}"
+
+        try:
+            # open doi using selenium webdriver
+            resp = requests.head(doi_url, allow_redirects=True, timeout=10)
+            resp.raise_for_status()
+            return doi_url
+        except requests.RequestException:
+            return None
+        except Exception:
+            return None
 
 
 def process_references(
@@ -312,9 +328,7 @@ def edit_distance(a: str, b: str) -> int:
     Returns:
         int: Edit distance between the two strings.
     """
-    sm = difflib.SequenceMatcher(
-        None, extract_apa_title(a), extract_apa_title(b)
-    )
+    sm = difflib.SequenceMatcher(None, extract_apa_title(a), extract_apa_title(b))
     return int(max(len(a), len(b)) * (1 - sm.ratio()))
 
 
@@ -466,8 +480,7 @@ def get_webdriver(browser: str):
             elif os_name == "darwin":  # macOS
                 if browser == "brave":
                     options.binary_location = (
-                        "/Applications/Brave Browser.app/Contents/"
-                        "MacOS/Brave Browser"
+                        "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser"
                     )
                 elif browser == "vivaldi":
                     options.binary_location = (
@@ -505,7 +518,7 @@ def check_references(
     max_edit_distance: int,
 ) -> Tuple[List[str], List[str], List[int]]:
     """
-    For each reference, check DBLP first, then Google Scholar if not found.
+    For each reference, check DOI first, then DBLP, then Google Scholar.
     Returns lists of citations, their sources, and edit distances.
 
     Args:
@@ -517,8 +530,8 @@ def check_references(
     Returns:
         Tuple[List[str], List[str], List[int]]:
             citations (List[str]): Citations found or error messages.
-            sources (List[str]): Source of each citation ("DBLP", "Scholar",
-                or "Error").
+            sources (List[str]): Source of each citation ("DOI", "DBLP",
+                "Scholar", or "Error").
             edit_distances (List[int]): Edit distances for each reference.
     """
     citations: List[str] = []
@@ -527,6 +540,7 @@ def check_references(
 
     driver = get_webdriver(browser)
     driver.set_window_size(800, 800)
+
     for ref in tqdm(references):
         if not re.search(r"\b\d{4}\b", ref):
             citations.append("No Year Found")
@@ -534,6 +548,16 @@ def check_references(
             edit_distances.append(999998)
             continue
 
+        # First, check if DOI exists and is valid
+        doi_url = extract_and_validate_doi(ref)
+
+        if doi_url:
+            citations.append(ref)  # Use original reference
+            sources.append("DOI")
+            edit_distances.append(0)  # Perfect match since DOI is valid
+            continue
+
+        # If no valid DOI, proceed with DBLP/Scholar pipeline
         title = extract_apa_title(ref)
         dblp_query = title if title else ref
         dblp_citation = check_dblp(dblp_query)
@@ -545,8 +569,8 @@ def check_references(
             dist = edit_distance(norm_ref, norm_dblp)
             # If DBLP edit distance is too high, try Scholar
             if dist > max_edit_distance:
-                scholar_cite, scholar_source, scholar_dist = (
-                    get_citation_from_scholar(driver, ref, captcha_time)
+                scholar_cite, scholar_source, scholar_dist = get_citation_from_scholar(
+                    driver, ref, captcha_time
                 )
                 if scholar_dist < dist:
                     citations.append(scholar_cite)
@@ -566,13 +590,12 @@ def check_references(
         citations.append(scholar_cite)
         sources.append(scholar_source)
         edit_distances.append(scholar_dist)
+
     driver.close()
     return citations, sources, edit_distances
 
 
-def extract_references(
-    pdf_name: str, references_page_range: List[int]
-) -> List[str]:
+def extract_references(pdf_name: str, references_page_range: List[int]) -> List[str]:
     """
     Extract references from the specified pages of a PDF.
 
@@ -589,13 +612,10 @@ def extract_references(
         page = reader.pages[p_num]
         text = page.extract_text(extraction_mode="layout")
         text_bits = text.split("\n\n")
-        t = re.split(r"\n(?!\s{4,})", text_bits[-1])
+        ref_bit = sorted(text_bits, key=len, reverse=True)[0]
+        t = re.split(r"\n(?!\s{4,})", ref_bit)
         for ref in t:
-            if (
-                ref != ""
-                and not ref.startswith("  ")
-                and not ref.startswith("\n")
-            ):
+            if ref != "" and not ref.startswith("  ") and not ref.startswith("\n"):
                 references.append(re.sub(r"\s+", " ", ref))
     return references
 
@@ -634,6 +654,9 @@ def find_references_section_by_text(
         first_line = text.strip().split("\n", 1)[0].strip().lower()
         if first_line.startswith("appendix"):
             end_page = i
+            break
+        elif "appendix" in first_line:
+            end_page = i - 1
             break
 
     if end_page is None:
@@ -737,10 +760,7 @@ def load_or_compute_results(
     if os.path.exists(csv_path) and not args.overwrite_csv:
         df = pd.read_csv(csv_path)
         if not required_cols.issubset(df.columns):
-            print(
-                f"CSV file {csv_path} is missing required columns. "
-                "Recomputing..."
-            )
+            print(f"CSV file {csv_path} is missing required columns. Recomputing...")
             df = None
         else:
             # Recompute edit distances in case code/logic has changed
